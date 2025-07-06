@@ -1,0 +1,29 @@
+{
+  "project_info": {
+    "project_number": "730662482580",
+    "project_id": "daytz-2cc14",
+    "storage_bucket": "daytz-2cc14.firebasestorage.app"
+  },
+  "client": [
+    {
+      "client_info": {
+        "mobilesdk_app_id": "1:730662482580:android:04aefd679c9394e584ba81",
+        "android_client_info": {
+          "package_name": "com.daytz.app"
+        }
+      },
+      "oauth_client": [],
+      "api_key": [
+        {
+          "current_key": "AIzaSyDbcK5rLaaeyjb2oVHVD2kFbMSBmBHVBxk"
+        }
+      ],
+      "services": {
+        "appinvite_service": {
+          "other_platform_oauth_client": []
+        }
+      }
+    }
+  ],
+  "configuration_version": "1"
+}

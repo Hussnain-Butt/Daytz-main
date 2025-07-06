@@ -1,0 +1,13 @@
+﻿diff --git a/node_modules/@expo/metro-config/build/serializer/reconcileTransformSerializerPlugin.js b/node_modules/@expo/metro-config/build/serializer/reconcileTransformSerializerPlugin.js
+index 1a2b3c4..d4e5f6a 100644
+--- a/node_modules/@expo/metro-config/build/serializer/reconcileTransformSerializerPlugin.js
++++ b/node_modules/@expo/metro-config/build/serializer/reconcileTransformSerializerPlugin.js
+@@ -9,7 +9,7 @@ const countLines_1 = require("./countLines");
+ const getCssModuleLocals_1 = require("./getCssModuleLocals");
+ const getTransformPlugin_1 = require("./getTransformPlugin");
+ // @ts-expect-error
+-const importLocationsPlugin = require(''metro/src/ModuleGraph/worker/importLocationsPlugin'');
++const importLocationsPlugin = require(''metro/src/worker/importLocationsPlugin'');
+ const baseJSBundle_1 = require("metro/src/DeltaBundler/Serializers/baseJSBundle");
+ const bundleToString_1 = require("metro/src/lib/bundleToString");
+ const sourceMapString_1 = require("metro/src/lib/sourceMapString");
