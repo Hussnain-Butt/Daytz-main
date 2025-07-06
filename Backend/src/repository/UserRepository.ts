@@ -2,14 +2,12 @@
 // ✅ COMPLETE AND FINAL CORRECTED CODE
 
 import pool from '../db'
-import { User } from '../types/User' // Removed unused import
-import { PoolClient } from 'pg' // For transactions
+import { User } from '../types/User'
+import { Pool, PoolClient } from 'pg'
 import * as humps from 'humps'
 
 const mapRowToUser = (row: any): User | null => {
-  if (!row) {
-    return null
-  }
+  if (!row) return null
   const camelizedDbRow = humps.camelizeKeys(row)
   return {
     userId: camelizedDbRow.userId,
@@ -23,22 +21,22 @@ const mapRowToUser = (row: any): User | null => {
     stickers: camelizedDbRow.stickers,
     tokens: typeof camelizedDbRow.tokens === 'number' ? camelizedDbRow.tokens : 0,
     enableNotifications: !!camelizedDbRow.enableNotifications,
-    // Correctly map is_profile_complete from DB to is_profile_complete in object
     is_profile_complete: !!camelizedDbRow.isProfileComplete,
     createdAt: camelizedDbRow.createdAt ? new Date(camelizedDbRow.createdAt) : new Date(),
     updatedAt: camelizedDbRow.updatedAt ? new Date(camelizedDbRow.updatedAt) : new Date(),
+    fcm_token: camelizedDbRow.fcmToken, // Add this if you have it in your User type
   }
 }
 
 class UserRepository {
-  async registerPushToken(userId: string, playerId: string): Promise<boolean> {
+  async registerPushToken(userId: string, fcmToken: string): Promise<boolean> {
     const client = await pool.connect()
     try {
       await client.query('BEGIN')
-      const clearOldUserSql = `UPDATE users SET one_signal_player_id = NULL WHERE one_signal_player_id = $1 AND user_id != $2;`
-      await client.query(clearOldUserSql, [playerId, userId])
-      const updateUserSql = `UPDATE users SET one_signal_player_id = $1, updated_at = NOW() WHERE user_id = $2;`
-      const result = await client.query(updateUserSql, [playerId, userId])
+      const clearOldUserSql = `UPDATE users SET fcm_token = NULL WHERE fcm_token = $1 AND user_id != $2;`
+      await client.query(clearOldUserSql, [fcmToken, userId])
+      const updateUserSql = `UPDATE users SET fcm_token = $1, updated_at = NOW() WHERE user_id = $2;`
+      const result = await client.query(updateUserSql, [fcmToken, userId])
       await client.query('COMMIT')
       return (result.rowCount ?? 0) > 0
     } catch (error) {
@@ -47,6 +45,12 @@ class UserRepository {
     } finally {
       client.release()
     }
+  }
+
+  async getPlayerId(userId: string): Promise<string | null> {
+    const query = 'SELECT fcm_token FROM users WHERE user_id = $1'
+    const { rows } = await pool.query(query, [userId])
+    return rows[0]?.fcm_token || null
   }
 
   async createUser(
@@ -85,13 +89,8 @@ class UserRepository {
     const query = `INSERT INTO users (${columns.join(', ')}) VALUES (${placeholders.join(
       ', ',
     )}) RETURNING *;`
-    try {
-      const { rows } = await pool.query(query, values)
-      return rows.length > 0 ? mapRowToUser(rows[0]) : null
-    } catch (error) {
-      console.error('[UserRepository.createUser] Error:', error)
-      throw error
-    }
+    const { rows } = await pool.query(query, values)
+    return rows.length > 0 ? mapRowToUser(rows[0]) : null
   }
 
   async getUserById(userId: string): Promise<User | null> {
@@ -130,29 +129,10 @@ class UserRepository {
     return rows.length > 0 ? mapRowToUser(rows[0]) : null
   }
 
-  async deleteUser(userId: string): Promise<boolean> {
-    const query = `DELETE FROM users WHERE user_id = $1;`
-    const result = await pool.query(query, [userId])
-    return (result.rowCount ?? 0) > 0
-  }
-
-  // ✅ --- THIS IS THE FIX ---
-  // The missing getAllUsers function has been added back.
   async getAllUsers(): Promise<User[]> {
     const query = `SELECT * FROM users ORDER BY created_at DESC;`
-    try {
-      const { rows } = await pool.query(query)
-      return rows.map(mapRowToUser).filter((user): user is User => user !== null)
-    } catch (error) {
-      console.error(`[UserRepository.getAllUsers] Error:`, error)
-      throw error
-    }
-  }
-
-  async replenishAllUserTokens(amount: number): Promise<number> {
-    const query = `UPDATE users SET tokens = $1, updated_at = NOW() RETURNING user_id;`
-    const { rowCount } = await pool.query(query, [amount])
-    return rowCount ?? 0
+    const { rows } = await pool.query(query)
+    return rows.map(mapRowToUser).filter((user): user is User => user !== null)
   }
 
   async spendUserTokens(
@@ -162,32 +142,23 @@ class UserRepository {
   ): Promise<User | null> {
     const isExternalTransaction = client !== null
     const db = client || (await pool.connect())
-
     try {
       if (!isExternalTransaction) await db.query('BEGIN')
-
       const selectQuery = 'SELECT tokens FROM users WHERE user_id = $1 FOR UPDATE;'
       const selectResult = await db.query(selectQuery, [userId])
-
       if (selectResult.rows.length === 0) {
-        throw new Error(`User with ID ${userId} not found for token spending.`)
+        throw new Error(`User with ID ${userId} not found.`)
       }
-
       const currentTokens = selectResult.rows[0].tokens as number
       if (currentTokens < amountToSpend) {
-        const error = new Error(
-          `Insufficient token balance for user ${userId}. Has: ${currentTokens}, Needs: ${amountToSpend}`,
-        )
+        const error = new Error(`Insufficient funds`)
         ;(error as any).code = 'INSUFFICIENT_FUNDS'
         throw error
       }
-
       const newBalance = currentTokens - amountToSpend
       const updateQuery = `UPDATE users SET tokens = $1, updated_at = NOW() WHERE user_id = $2 RETURNING *;`
       const updateResult = await db.query(updateQuery, [newBalance, userId])
-
       if (!isExternalTransaction) await db.query('COMMIT')
-
       return mapRowToUser(updateResult.rows[0])
     } catch (error) {
       if (!isExternalTransaction) await db.query('ROLLBACK')
@@ -195,6 +166,21 @@ class UserRepository {
     } finally {
       if (!isExternalTransaction) (db as PoolClient).release()
     }
+  }
+
+  // ✅ --- THIS IS THE FIX ---
+  // The missing functions have been added back to the class.
+
+  async deleteUser(userId: string): Promise<boolean> {
+    const query = `DELETE FROM users WHERE user_id = $1;`
+    const result = await pool.query(query, [userId])
+    return (result.rowCount ?? 0) > 0
+  }
+
+  async replenishAllUserTokens(amount: number): Promise<number> {
+    const query = `UPDATE users SET tokens = $1, updated_at = NOW() RETURNING user_id;`
+    const { rowCount } = await pool.query(query, [amount])
+    return rowCount ?? 0
   }
 }
 
