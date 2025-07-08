@@ -1,43 +1,42 @@
-// File: src/types/Date.ts
-// ✅ COMPLETE AND FINAL UPDATED CODE
+// File: src/types/Date.ts (Backend)
+// ✅ COMPLETE AND FINAL CORRECTED CODE
 
-// Represents the full Date object from the database.
+// Represents the status of a date, must match database enum
+export type StatusType = 'pending' | 'approved' | 'declined' | 'cancelled' | 'completed'
+
+// The full Date object as it exists in the database
 export interface Date {
   dateId: number
   date: string // YYYY-MM-DD
-  time: string | null // HH:MM:SS or null
+  time: string | null // HH:MM:SS
   userFrom: string
   userTo: string
   userFromApproved: boolean
   userToApproved: boolean
-  locationMetadata: any | null
+  locationMetadata?: {
+    name?: string
+    address?: string
+    place_id?: string
+  } | null
   status: StatusType
-  createdAt?: string
-  updatedAt?: string
+  createdAt: Date
+  updatedAt: Date
 }
 
-// ✅ THIS IS THE FIX
-// This type now correctly includes all the optional fields that might come from the frontend.
-export interface CreateDatePayload {
-  // Fields for the Date Proposal
-  userTo: string
-  date: string // YYYY-MM-DD
-  time: string | null // HH:MM:ss
-  locationMetadata: any | null
-
-  // Fields for the Attraction
-  romanticRating: number
-  sexualRating: number
-  friendshipRating: number
-  isUpdate: boolean
-
-  // Optional new attraction fields
-  longTermPotential?: boolean
-  intellectual?: boolean
-  emotional?: boolean
+// ✅ NEW TYPE: This defines the structure for the upcoming dates list.
+export interface UpcomingDate {
+  dateId: number
+  date: string
+  time: string | null
+  locationMetadata: { name: string }
+  otherUser: {
+    userId: string
+    firstName: string
+    profilePictureUrl: string | null
+  }
 }
 
-// This type is used internally by the service and repository.
+// Data structure for creating a new date entry, used internally by services
 export interface CreateDateInternal {
   date: string
   time: string | null
@@ -45,9 +44,27 @@ export interface CreateDateInternal {
   userTo: string
   userFromApproved: boolean
   userToApproved: boolean
-  locationMetadata: any | null
+  locationMetadata?: {
+    name?: string
+    address?: string
+  } | null
   status: StatusType
 }
 
-// The ENUM for all possible date statuses.
-export type StatusType = 'unscheduled' | 'pending' | 'approved' | 'cancelled' | 'completed'
+// Payload received from the frontend to create a new date proposal
+export interface CreateDatePayload {
+  date: string
+  time: string | null
+  userTo: string
+  locationMetadata?: {
+    name?: string
+    address?: string
+  } | null
+  romanticRating: number
+  sexualRating: number
+  friendshipRating: number
+  longTermPotential?: boolean
+  intellectual?: boolean
+  emotional?: boolean
+  isUpdate?: boolean
+}

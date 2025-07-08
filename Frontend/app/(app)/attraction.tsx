@@ -8,16 +8,16 @@ import {
   TouchableOpacity,
   ScrollView,
   ActivityIndicator,
-  Alert,
+  Alert, // Confirmation dialog ke liye rakha gaya hai
   Image,
   StatusBar as RNStatusBar,
   Platform,
+  Modal, // BubblePopup ke liye import
 } from 'react-native';
 import Slider from '@react-native-community/slider';
 import { useRouter, useLocalSearchParams } from 'expo-router';
 import { format } from 'date-fns';
 import { useAuth } from '../../contexts/AuthContext';
-// API functions ab propose-date screen par istemal hongi
 import {
   getUserTokenBalance,
   getUserById,
@@ -36,6 +36,11 @@ const ROMANTIC_ICON = require('../../assets/romantic.png');
 const SEXUAL_ICON = require('../../assets/sexual.png');
 const FRIENDSHIP_ICON = require('../../assets/friendship.png');
 const TOKEN_ICON = require('../../assets/match.png');
+
+// =====> ALERT KI TASVEEREIN IMPORT KAREIN (PATH THEEK KAREIN) <=====
+const calcHappyIcon = require('../../assets/calc-happy.png');
+const calcErrorIcon = require('../../assets/calc-error.png');
+// =====================================================================
 
 // --- LABEL CONSTANTS ---
 const ROMANTIC_LABELS: Record<number, string> = {
@@ -60,7 +65,7 @@ const FRIENDSHIP_LABELS: Record<number, string> = {
 // --- SCREEN COLORS ---
 const screenColors = {
   background: themeColors.Background || '#121212',
-  cardBackground: 'transparent', // ✅ UI CHANGE 1: Slider background is now transparent
+  cardBackground: 'transparent',
   headerBackground: themeColors.Background || '#121212',
   primaryAccentYellow: themeColors.GoldPrimary || '#FFD700',
   backButtonCircle: themeColors.TealPrimary || '#00BCD4',
@@ -81,6 +86,36 @@ const screenColors = {
 const MIN_RATING = 0;
 const MAX_RATING = 3;
 const RATING_STEP = 1;
+
+// --- NEW BUBBLE POPUP COMPONENT ---
+const BubblePopup = ({ visible, type, title, message, buttonText, onClose }) => {
+  if (!visible) {
+    return null;
+  }
+
+  const isSuccess = type === 'success';
+  const imageSource = isSuccess ? calcHappyIcon : calcErrorIcon;
+  const buttonStyle = isSuccess ? styles.successButton : styles.errorButton;
+  const buttonTextStyle = isSuccess ? styles.successButtonText : styles.errorButtonText;
+
+  return (
+    <Modal transparent visible={visible} animationType="fade" onRequestClose={onClose}>
+      <View style={styles.overlay}>
+        <View style={styles.popupContainer}>
+          <Image source={imageSource} style={styles.popupImage} />
+          <View style={styles.bubble}>
+            <Text style={styles.popupTitle}>{title}</Text>
+            <Text style={styles.popupMessage}>{message}</Text>
+            <TouchableOpacity style={[styles.popupButton, buttonStyle]} onPress={onClose}>
+              <Text style={buttonTextStyle}>{buttonText}</Text>
+            </TouchableOpacity>
+          </View>
+        </View>
+      </View>
+    </Modal>
+  );
+};
+// --- END OF BUBBLE POPUP COMPONENT ---
 
 const getTypeOfAttraction = (r: number, s: number, f: number): string => {
   const interest = r + s + f;
@@ -127,14 +162,32 @@ export default function AttractionScreen() {
   } | null>(null);
   const [isLoadingTargetUser, setIsLoadingTargetUser] = useState(false);
 
+  // =====> CUSTOM POPUP KE LIYE STATE <=====
+  const [popupState, setPopupState] = useState({
+    visible: false,
+    type: 'error' as 'success' | 'error',
+    title: '',
+    message: '',
+    onCloseCallback: undefined as (() => void) | undefined,
+  });
+  // ======================================
+
+  // =====> CUSTOM POPUP DIKHANE KE LIYE HELPER FUNCTION <=====
   const showPopup = (
     title: string,
     message: string,
     type: 'success' | 'error' = 'error',
     onCloseCallback?: () => void
   ) => {
-    Alert.alert(title, message, [{ text: 'OK', onPress: onCloseCallback }]);
+    setPopupState({
+      visible: true,
+      title,
+      message,
+      type,
+      onCloseCallback,
+    });
   };
+  // ========================================================
 
   useEffect(() => {
     RNStatusBar.setBarStyle('light-content');
@@ -167,7 +220,6 @@ export default function AttractionScreen() {
       setIsCheckingExisting(true);
       setIsLoadingTargetUser(true);
 
-      // Fetch user details
       try {
         const response = await getUserById(userToId);
         if (response.data) {
@@ -185,7 +237,6 @@ export default function AttractionScreen() {
         setIsLoadingTargetUser(false);
       }
 
-      // Fetch existing attraction
       try {
         const attractionResponse = await getAttractionByUserFromUserToAndDate(
           authUser.sub,
@@ -227,7 +278,6 @@ export default function AttractionScreen() {
     return storeTokenBalance >= totalTokenCost;
   }, [storeTokenBalance, totalTokenCost, existingAttraction]);
 
-  // ✅ --- FUNCTIONAL CHANGE 1: This is now `handleProceedToPropose` ---
   const handleProceedToPropose = () => {
     if (!userToId || !storyDate) {
       showPopup('Error', 'Cannot proceed, essential information is missing.', 'error');
@@ -253,7 +303,6 @@ export default function AttractionScreen() {
       );
     }
 
-    // ✅ --- FUNCTIONAL CHANGE 2: Navigate with slider values as parameters ---
     router.push({
       pathname: '/(app)/propose-date',
       params: {
@@ -386,7 +435,6 @@ export default function AttractionScreen() {
             </View>
           )}
 
-          {/* ✅ --- FUNCTIONAL CHANGE 3: Button now calls handleProceedToPropose --- */}
           <TouchableOpacity
             style={[
               styles.mainActionButton,
@@ -406,6 +454,21 @@ export default function AttractionScreen() {
           </Text>
         </ScrollView>
       </View>
+      {/* Naya popup render ho raha hai */}
+      <BubblePopup
+        visible={popupState.visible}
+        type={popupState.type}
+        title={popupState.title}
+        message={popupState.message}
+        buttonText="OK"
+        onClose={() => {
+          const callback = popupState.onCloseCallback;
+          setPopupState({ ...popupState, visible: false, onCloseCallback: undefined });
+          if (callback) {
+            callback();
+          }
+        }}
+      />
     </PaperProvider>
   );
 }
@@ -493,7 +556,6 @@ const styles = StyleSheet.create({
     marginBottom: 8,
     minHeight: 36,
   },
-  // ✅ --- UI CHANGE 2: Icon size is now bigger ---
   sliderTypeIcon: { width: 44, height: 44, marginRight: 12 },
   sliderItemValueLabel: { fontSize: 16, color: screenColors.textValueLabel, fontWeight: '600' },
   sliderItemValueLabelPlaceholder: {
@@ -542,5 +604,75 @@ const styles = StyleSheet.create({
     textAlign: 'center',
     marginTop: 20,
     paddingHorizontal: 10,
+  },
+
+  // --- NAYE BUBBLE POPUP KE STYLES ---
+  overlay: {
+    flex: 1,
+    backgroundColor: 'rgba(0, 0, 0, 0.7)',
+    justifyContent: 'center',
+    alignItems: 'center',
+    paddingHorizontal: 20,
+  },
+  popupContainer: {
+    alignItems: 'center',
+    width: '100%',
+    maxWidth: 350,
+  },
+  popupImage: {
+    width: 220,
+    height: 220,
+    resizeMode: 'contain',
+    zIndex: 1,
+    marginBottom: -80,
+  },
+  bubble: {
+    width: '90%',
+    backgroundColor: '#FFFFFF',
+    borderRadius: 25,
+    padding: 20,
+    paddingTop: 90,
+    alignItems: 'center',
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.3,
+    shadowRadius: 5,
+    elevation: 8,
+  },
+  popupTitle: {
+    fontSize: 28,
+    fontWeight: 'bold',
+    color: '#000000',
+    textAlign: 'center',
+    marginBottom: 15,
+  },
+  popupMessage: {
+    fontSize: 17,
+    color: '#333333',
+    textAlign: 'center',
+    marginBottom: 25,
+    lineHeight: 24,
+  },
+  popupButton: {
+    borderRadius: 20,
+    paddingVertical: 10,
+    paddingHorizontal: 40,
+    alignItems: 'center',
+  },
+  errorButton: {
+    backgroundColor: themeColors.PinkPrimary || '#FF6B6B',
+  },
+  successButton: {
+    backgroundColor: themeColors.GoldPrimary || '#FFD700',
+  },
+  errorButtonText: {
+    color: themeColors.White || '#FFFFFF',
+    fontSize: 15,
+    fontWeight: 'bold',
+  },
+  successButtonText: {
+    color: themeColors.Black || '#000000',
+    fontSize: 15,
+    fontWeight: 'bold',
   },
 });

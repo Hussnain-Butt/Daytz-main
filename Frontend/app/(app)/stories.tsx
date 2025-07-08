@@ -1,5 +1,5 @@
 // --- COMPLETE FINAL UPDATED CODE: app/(app)/stories/index.tsx ---
-// This version fixes the ReferenceError and includes performance improvements.
+// This version integrates the BubblePopup component.
 
 import React, { useState, useEffect, useRef, useCallback, useMemo } from 'react';
 import {
@@ -12,18 +12,18 @@ import {
   TouchableOpacity,
   Image,
   FlatList,
-  Alert,
+  Alert, // Confirmation dialogs ke liye rakha gaya hai
   Platform,
   StatusBar,
   Animated,
+  Modal, // BubblePopup ke liye import
 } from 'react-native';
 import { useRouter, useLocalSearchParams, useFocusEffect } from 'expo-router';
-import { Video, ResizeMode, AVPlaybackStatus, AVPlaybackStatusError } from 'expo-av';
+import { Video, ResizeMode, AVPlaybackStatus } from 'expo-av';
 import { Gesture, GestureDetector } from 'react-native-gesture-handler';
 import { runOnJS, useSharedValue, useAnimatedStyle, withTiming } from 'react-native-reanimated';
 import { BottomSheetModal, BottomSheetView, BottomSheetBackdrop } from '@gorhom/bottom-sheet';
 
-// Import simplified API functions
 import { getStoriesByDate, getPlayableVideoUrl } from '../../api/api';
 import { useAuth } from '../../contexts/AuthContext';
 import { StoryQueryResult } from '../../types/CalendarDay';
@@ -31,11 +31,16 @@ import { StoryQueryResult } from '../../types/CalendarDay';
 import UserProfileCard from '../../components/UserProfileCard';
 import { colors } from '../../utils/theme';
 
-// Assets
+// --- Assets ---
 const CLOSE_ICON = require('../../assets/close_icon.png');
 const ATTRACTION_ICON = require('../../assets/calendarButton.png');
 const BLOCK_ICON = require('../../assets/blockIcon.png');
 const DEFAULT_PROFILE_PIC = require('../../assets/characterIcon.png');
+
+// =====> ALERT KI TASVEEREIN IMPORT KAREIN (PATH THEEK KAREIN) <=====
+const calcHappyIcon = require('../../assets/calc-happy.png');
+const calcErrorIcon = require('../../assets/calc-error.png');
+// =====================================================================
 
 // --- Layout and Style Constants ---
 const { width: SCREEN_WIDTH, height: SCREEN_HEIGHT } = Dimensions.get('window');
@@ -69,7 +74,6 @@ interface StoryProgressBarsProps {
   onBarPress?: (index: number) => void;
 }
 
-// ✅ FIX: Styles ko yahan define kiya gaya hai, components se pehle
 const styles = StyleSheet.create({
   container: { flex: 1, backgroundColor: '#000' },
   centered: { justifyContent: 'center', alignItems: 'center', padding: 20 },
@@ -172,9 +176,106 @@ const styles = StyleSheet.create({
     borderRadius: 2,
   },
   bottomSheetContentContainer: { flex: 1 },
+  // --- NAYE BUBBLE POPUP KE STYLES ---
+  overlay: {
+    flex: 1,
+    backgroundColor: 'rgba(0, 0, 0, 0.7)',
+    justifyContent: 'center',
+    alignItems: 'center',
+    paddingHorizontal: 20,
+  },
+  popupContainer: {
+    alignItems: 'center',
+    width: '100%',
+    maxWidth: 350,
+  },
+  popupImage: {
+    width: 220,
+    height: 220,
+    resizeMode: 'contain',
+    zIndex: 1,
+    marginBottom: -80,
+  },
+  bubble: {
+    width: '90%',
+    backgroundColor: '#FFFFFF',
+    borderRadius: 25,
+    padding: 20,
+    paddingTop: 90,
+    alignItems: 'center',
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.3,
+    shadowRadius: 5,
+    elevation: 8,
+  },
+  popupTitle: {
+    fontSize: 28,
+    fontWeight: 'bold',
+    color: '#000000',
+    textAlign: 'center',
+    marginBottom: 15,
+  },
+  popupMessage: {
+    fontSize: 17,
+    color: '#333333',
+    textAlign: 'center',
+    marginBottom: 25,
+    lineHeight: 24,
+  },
+  popupButton: {
+    borderRadius: 20,
+    paddingVertical: 10,
+    paddingHorizontal: 40,
+    alignItems: 'center',
+  },
+  errorButton: {
+    backgroundColor: colors.PinkPrimary || '#FF6B6B',
+  },
+  successButton: {
+    backgroundColor: colors.GoldPrimary || '#FFD700',
+  },
+  errorButtonText: {
+    color: colors.White || '#FFFFFF',
+    fontSize: 15,
+    fontWeight: 'bold',
+  },
+  successButtonText: {
+    color: colors.Black || '#000000',
+    fontSize: 15,
+    fontWeight: 'bold',
+  },
 });
 
-// --- Components ---
+// --- NEW BUBBLE POPUP COMPONENT ---
+const BubblePopup = ({ visible, type, title, message, buttonText, onClose }) => {
+  if (!visible) {
+    return null;
+  }
+
+  const isSuccess = type === 'success';
+  const imageSource = isSuccess ? calcHappyIcon : calcErrorIcon;
+  const buttonStyle = isSuccess ? styles.successButton : styles.errorButton;
+  const buttonTextStyle = isSuccess ? styles.successButtonText : styles.errorButtonText;
+
+  return (
+    <Modal transparent visible={visible} animationType="fade" onRequestClose={onClose}>
+      <View style={styles.overlay}>
+        <View style={styles.popupContainer}>
+          <Image source={imageSource} style={styles.popupImage} />
+          <View style={styles.bubble}>
+            <Text style={styles.popupTitle}>{title}</Text>
+            <Text style={styles.popupMessage}>{message}</Text>
+            <TouchableOpacity style={[styles.popupButton, buttonStyle]} onPress={onClose}>
+              <Text style={buttonTextStyle}>{buttonText}</Text>
+            </TouchableOpacity>
+          </View>
+        </View>
+      </View>
+    </Modal>
+  );
+};
+// --- END OF BUBBLE POPUP COMPONENT ---
 
 const StoryProgressBars: React.FC<StoryProgressBarsProps> = React.memo(
   ({ storiesCount, currentStoryIndex, currentVideoProgress, onBarPress }) => {
@@ -369,6 +470,26 @@ export default function StoriesScreen() {
   const [videoLoadStates, setVideoLoadStates] = useState<VideoLoadStateMap>({});
   const [isScreenFocused, setIsScreenFocused] = useState(true);
 
+  // =====> CUSTOM POPUP KE LIYE STATE <=====
+  const [popupState, setPopupState] = useState({
+    visible: false,
+    type: 'error' as 'success' | 'error',
+    title: '',
+    message: '',
+  });
+  // ======================================
+
+  // =====> CUSTOM POPUP DIKHANE KE LIYE HELPER FUNCTION <=====
+  const showPopup = (title: string, message: string, type: 'success' | 'error' = 'error') => {
+    setPopupState({
+      visible: true,
+      title,
+      message,
+      type,
+    });
+  };
+  // ========================================================
+
   const isNavigatingAway = useRef(false);
   const isSwiping = useRef(false);
   const currentVideoProgress = useSharedValue(0);
@@ -490,7 +611,7 @@ export default function StoriesScreen() {
 
   const navigateToAttraction = useCallback(
     async (targetUserToId: string) => {
-      if (!storyDate) return Alert.alert('Error', 'Story date not found.');
+      if (!storyDate) return showPopup('Error', 'Story date not found.', 'error');
       isNavigatingAway.current = true;
       await pauseAllVideos();
       bottomSheetModalRef.current?.dismiss();
@@ -704,6 +825,15 @@ export default function StoriesScreen() {
           )}
         </BottomSheetView>
       </BottomSheetModal>
+      {/* Naya popup render ho raha hai */}
+      <BubblePopup
+        visible={popupState.visible}
+        type={popupState.type}
+        title={popupState.title}
+        message={popupState.message}
+        buttonText="OK"
+        onClose={() => setPopupState((prev) => ({ ...prev, visible: false }))}
+      />
     </View>
   );
 }

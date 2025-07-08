@@ -1,12 +1,26 @@
+// File: app/_layout.tsx
+// ✅ COMPLETE AND FINAL CORRECTED CODE
+
 import React, { useEffect } from 'react';
 import { Stack, useRouter, useSegments } from 'expo-router';
 import { AuthProvider, useAuth } from '../contexts/AuthContext';
 import { useUserStore } from '../store/useUserStore';
-import { ActivityIndicator, View, StyleSheet } from 'react-native';
+import { ActivityIndicator, View, StyleSheet, Alert, Platform } from 'react-native';
 
-// Step 1: Import zaroori providers
+// --- Imports for libraries ---
 import { GestureHandlerRootView } from 'react-native-gesture-handler';
 import { BottomSheetModalProvider } from '@gorhom/bottom-sheet';
+import messaging from '@react-native-firebase/messaging';
+import * as Notifications from 'expo-notifications';
+
+// Configure how notifications are handled when the app is in the FOREGROUND
+Notifications.setNotificationHandler({
+  handleNotification: async () => ({
+    shouldShowAlert: true,
+    shouldPlaySound: true,
+    shouldSetBadge: false,
+  }),
+});
 
 function RootLayoutNav() {
   const { auth0User, isLoading } = useAuth();
@@ -14,37 +28,66 @@ function RootLayoutNav() {
   const segments = useSegments();
   const router = useRouter();
 
+  // --- Main navigation logic ---
   useEffect(() => {
     if (isLoading) return;
-
     const isUserLoggedIn = !!auth0User;
-    const inAuthGroup = segments[0] === '(auth)';
     const inAppGroup = segments[0] === '(app)';
-
-    // SCENARIO 1: User is Logged IN
     if (isUserLoggedIn) {
-      // Priority 1: Agar 'showThankYou' flag on hai, to foran thank-you screen par bhejein.
       if (showThankYouAfterAuth) {
         router.replace('/(app)/thank-you');
-        return;
-      }
-      // Priority 2: Agar user logged in hai lekin (auth) group ya root page par hai,
-      // to usay app ke andar default screen par bhejein.
-      if (!inAppGroup) {
+      } else if (!inAppGroup) {
         router.replace('/(app)/calendar');
-        return;
       }
-    }
-    // SCENARIO 2: User is Logged OUT
-    else {
-      // Agar user logged out hai aur woh (auth) group mein nahi hai,
-      // to usay foran login screen par bhejein.
-      if (!inAuthGroup) {
+    } else {
+      if (inAppGroup) {
         router.replace('/(auth)/login');
-        return;
       }
     }
-  }, [auth0User, isLoading, segments, router, showThankYouAfterAuth]);
+  }, [auth0User, isLoading, segments, showThankYouAfterAuth]);
+
+  // --- Firebase Notification Listeners ---
+  useEffect(() => {
+    // --- Listener for when the app is in the FOREGROUND ---
+    const unsubscribeForeground = messaging().onMessage(async (remoteMessage) => {
+      console.log('A new FCM message arrived in Foreground!', JSON.stringify(remoteMessage));
+
+      // ✅ --- THIS IS THE FIX ---
+      // This line will show a native Alert popup when a notification is received
+      // while the app is open.
+      if (remoteMessage.notification) {
+        Alert.alert(
+          remoteMessage.notification.title || 'New Notification',
+          remoteMessage.notification.body || ''
+        );
+      }
+    });
+
+    // --- Listener for when a user taps on a notification ---
+    const unsubscribeOpened = messaging().onNotificationOpenedApp((remoteMessage) => {
+      console.log('Notification caused app to open from background state:', remoteMessage);
+      const dateId = remoteMessage.data?.dateId;
+      if (dateId) {
+        console.log(`Should navigate to date details for ID: ${dateId}`);
+        // Example: router.push(`/(app)/dates/${dateId}`);
+      }
+    });
+
+    messaging()
+      .getInitialNotification()
+      .then((remoteMessage) => {
+        if (remoteMessage) {
+          console.log('Notification caused app to open from killed state:', remoteMessage);
+          const dateId = remoteMessage.data?.dateId;
+          if (dateId) {
+            console.log(`Should navigate to date details for ID: ${dateId}`);
+            // Example: setTimeout(() => router.push(`/(app)/dates/${dateId}`), 1000);
+          }
+        }
+      });
+
+    return unsubscribeForeground;
+  }, []);
 
   if (isLoading) {
     return (
@@ -66,11 +109,8 @@ function RootLayoutNav() {
 
 export default function RootLayout() {
   return (
-    // Step 2: App ko GestureHandlerRootView se wrap karein
     <GestureHandlerRootView style={{ flex: 1 }}>
-      {/* Step 3: App ko BottomSheetModalProvider se wrap karein */}
       <BottomSheetModalProvider>
-        {/* Aapka pehle se maujood AuthProvider iske andar rahega */}
         <AuthProvider>
           <RootLayoutNav />
         </AuthProvider>
