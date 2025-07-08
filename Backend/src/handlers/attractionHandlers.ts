@@ -84,9 +84,12 @@ export const createAttractionHandler = asyncHandler(
 
       if (finalAttraction.result) {
         // ✅ --- THIS IS THE FIX ---
-        // The extra third argument has been removed from the function call.
-        // The function now correctly receives only the two required user IDs.
-        await notificationService.sendMatchNotification(authenticatedUserId, userTo)
+        // We now pass the required third argument, the attractionId.
+        await notificationService.sendMatchNotification(
+          authenticatedUserId,
+          userTo,
+          finalAttraction.attractionId,
+        )
       }
 
       const statusCode =
@@ -106,13 +109,11 @@ export const createAttractionHandler = asyncHandler(
 )
 
 // No changes to the handlers below
-
 export const getAttractionsByUserFromAndUserToHandler = asyncHandler(
   async (req: CustomRequest, res: Response, next: NextFunction) => {
     const userFrom = req.params.userFrom
     const userTo = req.params.userTo
     const authenticatedUserId = req.userId
-
     if (!userFrom || !userTo) {
       return res.status(400).json({ message: 'userFrom and userTo parameters are required.' })
     }
@@ -120,11 +121,8 @@ export const getAttractionsByUserFromAndUserToHandler = asyncHandler(
       !authenticatedUserId ||
       (userFrom !== authenticatedUserId && userTo !== authenticatedUserId)
     ) {
-      return res
-        .status(403)
-        .json({ message: 'Forbidden. You can only view attractions involving yourself.' })
+      return res.status(403).json({ message: 'Forbidden.' })
     }
-
     try {
       const attractions = await attractionService.getAttractionsByUserFromAndUserTo(
         userFrom,
@@ -143,7 +141,6 @@ export const getAttractionByUserFromUserToAndDateHandler = asyncHandler(
     const userTo = req.params.userTo
     const date = req.params.date
     const authenticatedUserId = req.userId
-
     if (!userFrom || !userTo || !date || !/^\d{4}-\d{2}-\d{2}$/.test(date)) {
       return res
         .status(400)
@@ -153,11 +150,8 @@ export const getAttractionByUserFromUserToAndDateHandler = asyncHandler(
       !authenticatedUserId ||
       (userFrom !== authenticatedUserId && userTo !== authenticatedUserId)
     ) {
-      return res
-        .status(403)
-        .json({ message: 'Forbidden. You can only view attractions involving yourself.' })
+      return res.status(403).json({ message: 'Forbidden.' })
     }
-
     try {
       const attraction = await attractionService.getAttraction(userFrom, userTo, date)
       if (!attraction) {

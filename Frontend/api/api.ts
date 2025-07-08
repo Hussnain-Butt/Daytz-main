@@ -4,38 +4,27 @@
 import axios, { AxiosInstance, AxiosProgressEvent, AxiosResponse } from 'axios';
 import { Platform } from 'react-native';
 
-// Apne sabhi types ko yahan import karein
 import { User, CreateUserApiPayload as ActualCreateUserPayloadType } from '../types/User';
 import { CalendarDay, StoryQueryResult as BackendStoryItem } from '../types/CalendarDay';
-import { DateObject as DateType, CreateDatePayload } from '../types/Date';
+import { DateObject, CreateDatePayload, DetailedDateObject, UpcomingDate } from '../types/Date';
 import { Transaction as BackendTransactionType } from '../types/Transaction';
+import { Notification, UnreadCountResponse } from '../types/Notification';
 import {
   CreateAttraction as CreateAttractionPayload,
   Attraction as AttractionResponse,
 } from '../types/Attraction';
 
-// --- Base URL Configuration ---
 const getApiBaseUrl = (): string => {
-  const envApiUrl = 'http://192.168.1.3:3000/api'; // Development URL
-  if (envApiUrl) {
-    // console.log(`API: Using URL from environment: ${envApiUrl}`);
-    return envApiUrl;
-  }
-  // Fallback for emulators
-  if (Platform.OS === 'android') {
-    return 'http://10.0.2.2:3000/api';
-  }
+  const envApiUrl = 'http://192.168.1.11:3000/api';
+  if (envApiUrl) return envApiUrl;
+  if (Platform.OS === 'android') return 'http://10.0.2.2:3000/api';
   return 'http://localhost:3000/api';
 };
 
 const API_BASE_URL = getApiBaseUrl();
 console.log(`✅ API: Final API_BASE_URL is: ${API_BASE_URL}`);
 
-// --- Axios Instance and Interceptor Configuration ---
-const apiClient: AxiosInstance = axios.create({
-  baseURL: API_BASE_URL,
-  timeout: 45000, // 45-second timeout for requests
-});
+const apiClient: AxiosInstance = axios.create({ baseURL: API_BASE_URL, timeout: 45000 });
 
 export type GetAccessTokenFunc = () => Promise<string | null | undefined>;
 
@@ -43,21 +32,14 @@ export const configureApiClient = (getAccessTokenFunc: GetAccessTokenFunc) => {
   console.log('[API] Configuring Axios interceptor with token provider.');
   apiClient.interceptors.request.use(
     async (config) => {
-      try {
-        const token = await getAccessTokenFunc();
-        if (token) {
-          config.headers.Authorization = `Bearer ${token}`;
-        }
-      } catch (error) {
-        console.error('[API Interceptor] CRITICAL: Could not get access token for request.', error);
-      }
+      const token = await getAccessTokenFunc();
+      if (token) config.headers.Authorization = `Bearer ${token}`;
       return config;
     },
     (error) => Promise.reject(error)
   );
 };
 
-// --- API Error Handling ---
 export const isAuthTokenApiError = (error: any): boolean => {
   const status = error?.response?.status || error?.originalError?.response?.status;
   return status === 401 || status === 403;
@@ -65,25 +47,12 @@ export const isAuthTokenApiError = (error: any): boolean => {
 
 const handleApiError = (error: unknown, context: string): void => {
   let message = 'An unknown error occurred.';
-  let status = 'N/A';
-
-  if (axios.isAxiosError(error)) {
-    status = String(error.response?.status || 'Network/Timeout');
-    message = error.response?.data?.message || error.message;
-    console.error(`API Error in [${context}] (${status}): ${message}`);
-  } else if (error instanceof Error) {
-    message = error.message;
-    console.error(`Generic Error in [${context}]: ${message}`);
-  } else {
-    console.error(`Unknown Error Type in [${context}]:`, error);
-  }
-
+  if (axios.isAxiosError(error)) message = error.response?.data?.message || error.message;
+  else if (error instanceof Error) message = error.message;
   const newError = new Error(`API call "${context}" failed: ${message}`);
-  (newError as any).originalError = error; // Preserve original error
+  (newError as any).originalError = error;
   throw newError;
 };
-
-// --- API Functions ---
 
 // --- USER API ---
 export const createUser = async (
@@ -117,6 +86,37 @@ export const updateUser = async (updateData: Partial<User>): Promise<AxiosRespon
   }
 };
 
+// --- NOTIFICATION API ---
+export const getMyNotifications = async (): Promise<AxiosResponse<Notification[]>> => {
+  try {
+    return await apiClient.get<Notification[]>(`/notifications`);
+  } catch (e) {
+    handleApiError(e, 'getMyNotifications');
+    throw e;
+  }
+};
+
+// ✅ THIS FUNCTION FIXES THE FRONTEND ERROR
+export const getUnreadNotificationsCount = async (): Promise<
+  AxiosResponse<UnreadCountResponse>
+> => {
+  try {
+    return await apiClient.get<UnreadCountResponse>(`/notifications/unread-count`);
+  } catch (e) {
+    handleApiError(e, 'getUnreadNotificationsCount');
+    throw e;
+  }
+};
+
+export const markNotificationsAsRead = async (): Promise<AxiosResponse<{ message: string }>> => {
+  try {
+    return await apiClient.post(`/notifications/mark-as-read`);
+  } catch (e) {
+    handleApiError(e, 'markNotificationsAsRead');
+    throw e;
+  }
+};
+
 // --- PUSH NOTIFICATION TOKEN REGISTRATION ---
 export const registerPushToken = async (
   fcmToken: string
@@ -139,6 +139,7 @@ export const getUserTokenBalance = async (): Promise<AxiosResponse<{ tokenBalanc
   }
 };
 
+// --- (Rest of the functions are here) ---
 export const purchaseTokens = async (payload: {
   tokenAmount: number;
   description: string;
@@ -151,8 +152,6 @@ export const purchaseTokens = async (payload: {
     throw e;
   }
 };
-
-// --- CALENDAR DAY & STORIES API ---
 export const getCalendarDaysByUserId = async (): Promise<AxiosResponse<CalendarDay[]>> => {
   try {
     return await apiClient.get<CalendarDay[]>(`/calendarDays/user`);
@@ -161,7 +160,6 @@ export const getCalendarDaysByUserId = async (): Promise<AxiosResponse<CalendarD
     throw e;
   }
 };
-
 export const getStoriesByDate = async (
   date: string
 ): Promise<AxiosResponse<BackendStoryItem[]>> => {
@@ -172,33 +170,56 @@ export const getStoriesByDate = async (
     throw e;
   }
 };
-
-// --- PLANNED DATE API ---
-export const createDate = async (payload: CreateDatePayload): Promise<AxiosResponse<DateType>> => {
+export const createDate = async (
+  payload: CreateDatePayload
+): Promise<AxiosResponse<DateObject>> => {
   try {
-    return await apiClient.post<DateType>(`/date`, payload);
+    return await apiClient.post<DateObject>(`/date`, payload);
   } catch (e) {
     handleApiError(e, 'createDate (Planned Event)');
     throw e;
   }
 };
 
+// ✅ UPDATED to return the detailed object type
+export const getDateById = async (
+  dateId: string
+): Promise<AxiosResponse<DetailedDateObject | null>> => {
+  try {
+    // The backend now returns a more detailed object, which we type here
+    return await apiClient.get<DetailedDateObject>(`/dates/${dateId}`);
+  } catch (e: any) {
+    if (axios.isAxiosError(e) && e.response?.status === 404)
+      return { ...e.response, status: 404, data: null } as AxiosResponse<DetailedDateObject | null>;
+    handleApiError(e, `getDateById (ID: ${dateId})`);
+    throw e;
+  }
+};
+export const updateDate = async (
+  dateId: string,
+  payload: Partial<{ status: 'approved' | 'declined' | 'cancelled' }>
+): Promise<AxiosResponse<DateObject>> => {
+  try {
+    return await apiClient.patch<DateObject>(`/dates/${dateId}`, payload);
+  } catch (e) {
+    handleApiError(e, `updateDate (ID: ${dateId})`);
+    throw e;
+  }
+};
 export const getDateByUserFromUserToAndDate = async (
   userFrom: string,
   userTo: string,
   date: string
-): Promise<AxiosResponse<DateType | null>> => {
+): Promise<AxiosResponse<DateObject | null>> => {
   try {
-    return await apiClient.get<DateType>(`/date/${userFrom}/${userTo}/${date}`);
+    return await apiClient.get<DateObject>(`/date/${userFrom}/${userTo}/${date}`);
   } catch (e: any) {
     if (axios.isAxiosError(e) && e.response?.status === 404)
-      return { ...e.response, status: 404, data: null } as AxiosResponse<DateType | null>;
+      return { ...e.response, status: 404, data: null } as AxiosResponse<DateObject | null>;
     handleApiError(e, `getDateByUserFromUserToAndDate`);
     throw e;
   }
 };
-
-// --- ATTRACTION API ---
 export const createAttraction = async (
   payload: Omit<CreateAttractionPayload, 'userFrom'>
 ): Promise<AxiosResponse<AttractionResponse>> => {
@@ -209,7 +230,6 @@ export const createAttraction = async (
     throw e;
   }
 };
-
 export const getAttractionByUserFromUserToAndDate = async (
   userFromId: string,
   userToId: string,
@@ -224,8 +244,6 @@ export const getAttractionByUserFromUserToAndDate = async (
     throw e;
   }
 };
-
-// --- FILE UPLOAD API ---
 export const uploadProfilePicture = async (
   formData: FormData
 ): Promise<AxiosResponse<{ message: string; profilePictureUrl: string; user: User }>> => {
@@ -239,7 +257,6 @@ export const uploadProfilePicture = async (
     throw e;
   }
 };
-
 export const uploadHomepageVideo = async (
   formData: FormData,
   onUploadProgress?: (progressEvent: AxiosProgressEvent) => void
@@ -255,7 +272,6 @@ export const uploadHomepageVideo = async (
     throw e;
   }
 };
-
 export const uploadCalendarVideo = async (
   formData: FormData,
   onUploadProgress?: (progressEvent: AxiosProgressEvent) => void
@@ -271,8 +287,6 @@ export const uploadCalendarVideo = async (
     throw e;
   }
 };
-
-// --- PLAYABLE VIDEO URL API ---
 export const getPlayableVideoUrl = async (identifier: {
   vimeoUri?: string | null;
   calendarId?: number | null;
@@ -292,6 +306,16 @@ export const getPlayableVideoUrl = async (identifier: {
         data: { playableUrl: null, message: 'Video not found' },
       } as AxiosResponse<{ playableUrl: string | null; message?: string }>;
     handleApiError(e, 'getPlayableVideoUrl');
+    throw e;
+  }
+};
+
+// ✅ NEW FUNCTION for the upcoming dates list
+export const getUpcomingDates = async (): Promise<AxiosResponse<UpcomingDate[]>> => {
+  try {
+    return await apiClient.get<UpcomingDate[]>(`/dates/me/upcoming`);
+  } catch (e) {
+    handleApiError(e, 'getUpcomingDates');
     throw e;
   }
 };

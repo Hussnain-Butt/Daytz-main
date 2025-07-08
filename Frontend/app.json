@@ -12,7 +12,9 @@
       "resizeMode": "contain",
       "backgroundColor": "#121212"
     },
-    "assetBundlePatterns": ["**/*"],
+    "assetBundlePatterns": [
+      "**/*"
+    ],
     "owner": "anchorweb",
     "web": {
       "bundler": "metro"
@@ -50,7 +52,10 @@
         "NSMicrophoneUsageDescription": "Allow Daytz to access your microphone.",
         "CFBundleURLTypes": [
           {
-            "CFBundleURLSchemes": ["com.daytz.app", "dev-il3jgemg2szpurs5.us.auth0.com"]
+            "CFBundleURLSchemes": [
+              "com.daytz.app",
+              "dev-il3jgemg2szpurs5.us.auth0.com"
+            ]
           }
         ]
       }
@@ -66,7 +71,8 @@
         "android.permission.READ_EXTERNAL_STORAGE",
         "android.permission.RECORD_AUDIO",
         "android.permission.POST_NOTIFICATIONS"
-      ]
+      ],
+      "versionCode": 3
     },
     "extra": {
       "router": {

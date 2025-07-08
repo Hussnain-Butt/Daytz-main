@@ -23,6 +23,7 @@ interface UserState {
   setIsFetchingUserProfile: (isFetching: boolean) => void;
   setProfileJustCompletedForNav: (isCompleted: boolean) => void;
   setShowThankYouAfterAuth: (show: boolean) => void;
+  clearShowThankYouAfterAuth: () => void; // ✅ NEW: Action to explicitly clear this flag
 }
 
 // 2. Create the store
@@ -69,7 +70,6 @@ export const useUserStore = create<UserState>((set) => ({
     });
   },
 
-  // ✅ THIS IS THE MOST IMPORTANT FIX
   // This function is called on logout. It must reset EVERYTHING to its initial state.
   clearUserProfile: () => {
     console.log('useUserStore: Clearing all user state and setting isLoggedIn to false.');
@@ -80,7 +80,7 @@ export const useUserStore = create<UserState>((set) => ({
       isFetchingTokenBalance: false,
       isFetchingUserProfile: false,
       profileJustCompletedForNav: false,
-      showThankYouAfterAuth: false,
+      showThankYouAfterAuth: false, // Ensure this is also reset on full logout
     });
   },
 
@@ -89,6 +89,11 @@ export const useUserStore = create<UserState>((set) => ({
   setIsFetchingUserProfile: (isFetching) => set({ isFetchingUserProfile: isFetching }),
   setProfileJustCompletedForNav: (isCompleted) => set({ profileJustCompletedForNav: isCompleted }),
   setShowThankYouAfterAuth: (show) => set({ showThankYouAfterAuth: show }),
+  // ✅ NEW ACTION: Resets only the showThankYouAfterAuth flag
+  clearShowThankYouAfterAuth: () => {
+    console.log('useUserStore: Clearing showThankYouAfterAuth flag.');
+    set({ showThankYouAfterAuth: false });
+  },
 }));
 
 // --- Helper Functions to interact with the store ---

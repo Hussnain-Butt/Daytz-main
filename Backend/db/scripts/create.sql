@@ -8,10 +8,11 @@ DROP TABLE IF EXISTS calendar_day;
 DROP TABLE IF EXISTS users;
 DROP TABLE IF EXISTS advertisements;
 DROP TABLE IF EXISTS tutorials;
-
+DROP TABLE IF EXISTS notifications; -- ✅ Dropping the new table if it exists
 -- Drop custom types if they exist
 DROP TYPE IF EXISTS status_type;
 DROP TYPE IF EXISTS transaction_type;
+DROP TYPE IF EXISTS notification_status; -- ✅ Dropping the new type if it exists
 
 
 -- =================================================================
@@ -37,6 +38,8 @@ CREATE TABLE users (
     tokens INTEGER DEFAULT 100, -- Default tokens for new users
     fcm_token VARCHAR(255) NULL -- Replaced one_signal_player_id with fcm_token
 );
+
+
 
 -- CALENDAR_DAY Table (No changes needed here)
 CREATE TABLE calendar_day (
