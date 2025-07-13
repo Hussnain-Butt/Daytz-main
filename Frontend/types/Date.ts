@@ -1,8 +1,8 @@
 // File: types/Date.ts (Frontend)
-// ✅ COMPLETE AND FINAL UPDATED CODE
+// ✅ COMPLETE AND FINAL CORRECTED CODE
 
-// Matches the backend's StatusType enum
-export type DateStatus = 'unscheduled' | 'pending' | 'approved' | 'cancelled' | 'completed';
+// ✅ 'declined' ko yahan bhi add kiya gaya hai taake dono files same rahen
+export type DateStatus = 'pending' | 'approved' | 'declined' | 'cancelled' | 'completed';
 
 // Represents a detailed Date object with nested user info
 export interface DetailedDateObject {
@@ -15,7 +15,7 @@ export interface DetailedDateObject {
     userId: string;
     firstName: string;
     profilePictureUrl: string | null;
-    videoUrl: string | null; // Proposer's video URL
+    videoUrl: string | null;
   };
   userTo: {
     userId: string;
@@ -26,7 +26,7 @@ export interface DetailedDateObject {
   updatedAt?: string;
 }
 
-// ✅ NEW TYPE: Represents a single item in the "Upcoming Dates" list
+// Represents a single item in the "Upcoming Dates" list
 export interface UpcomingDate {
   dateId: number;
   date: string;
@@ -37,9 +37,16 @@ export interface UpcomingDate {
     firstName: string;
     profilePictureUrl: string | null;
   };
+  // Needed for frontend logic
+  userFrom: string;
+  userTo: string;
+  // Populated on the frontend
+  romanticRating: number;
+  sexualRating: number;
+  friendshipRating: number;
 }
 
-// Represents a basic Date object, typically used for payloads
+// Represents a basic Date object
 export interface DateObject {
   dateId: number;
   date: string;

@@ -1,7 +1,7 @@
 // File: app/(app)/calendar.tsx
-// ✅ COMPLETE AND FINAL UPDATED CODE WITH BUBBLE POPUP
+// ✅ COMPLETE AND FINAL UPDATED CODE (with new, reliable fetching logic)
 
-import React, { useState, useCallback } from 'react';
+import React, { useState, useCallback, useEffect } from 'react';
 import {
   SafeAreaView,
   View,
@@ -13,7 +13,7 @@ import {
   Platform,
   ScrollView,
   RefreshControl,
-  Modal, // BubblePopup ke liye import
+  Modal,
 } from 'react-native';
 import { useAuth } from '../../contexts/AuthContext';
 import VideoCalendar from '../../components/calendar';
@@ -23,6 +23,7 @@ import {
   getCalendarDaysByUserId,
   getUnreadNotificationsCount,
   getUpcomingDates,
+  getAttractionByUserFromUserToAndDate,
 } from '../../api/api';
 import { CalendarDay } from '../../types/CalendarDay';
 import { UpcomingDate } from '../../types/Date';
@@ -34,23 +35,15 @@ import { Ionicons } from '@expo/vector-icons';
 const LOGO_IMAGE = require('../../assets/brand.png');
 const COIN_ICON = require('../../assets/match.png');
 const NOTIFICATION_ICON = require('../../assets/notification_bell_icon.png');
-
-// =====> ALERT KI TASVEEREIN IMPORT KAREIN (PATH THEEK KAREIN) <=====
 const calcHappyIcon = require('../../assets/calc-happy.png');
 const calcErrorIcon = require('../../assets/calc-error.png');
-// =====================================================================
 
-// --- NEW BUBBLE POPUP COMPONENT ---
 const BubblePopup = ({ visible, type, title, message, buttonText, onClose }) => {
-  if (!visible) {
-    return null;
-  }
-
+  if (!visible) return null;
   const isSuccess = type === 'success';
   const imageSource = isSuccess ? calcHappyIcon : calcErrorIcon;
   const buttonStyle = isSuccess ? styles.successButton : styles.errorButton;
   const buttonTextStyle = isSuccess ? styles.successButtonText : styles.errorButtonText;
-
   return (
     <Modal transparent visible={visible} animationType="fade" onRequestClose={onClose}>
       <View style={styles.overlay}>
@@ -68,7 +61,22 @@ const BubblePopup = ({ visible, type, title, message, buttonText, onClose }) => 
     </Modal>
   );
 };
-// --- END OF BUBBLE POPUP COMPONENT ---
+
+const getTypeOfAttraction = (r: number, s: number, f: number): string => {
+  const interest = r + s + f;
+  if (interest === 0) return 'Not Specified';
+  if (s === 0 && r === 0 && f === 0) return 'No Interest';
+  if (r === 0 && f === 0) return 'Hook Up';
+  if (r === 0 && s === 0) return 'Friends!';
+  if (f === 0 && s === 0) return 'Company';
+  if (r === 0) return 'FWB';
+  if (s === 0) return 'Platonic Dating';
+  if (f === 0) return 'Lovers';
+  if (interest < 5) return 'We Could Meet';
+  if (interest === 5) return "I'm Into It";
+  if (interest === 6) return 'Would Love to Meet';
+  return 'My Person!';
+};
 
 const UpcomingDateItem = ({
   item,
@@ -76,30 +84,44 @@ const UpcomingDateItem = ({
 }: {
   item: UpcomingDate;
   onPress: (item: UpcomingDate) => void;
-}) => (
-  <TouchableOpacity style={styles.upcomingItem} onPress={() => onPress(item)}>
-    <Avatar.Image size={52} source={{ uri: item.otherUser.profilePictureUrl }} />
-    <View style={styles.upcomingItemDetails}>
-      <Text style={styles.upcomingItemName} numberOfLines={1}>
-        {item.otherUser.firstName}
-      </Text>
-      <Text style={styles.upcomingItemInfo} numberOfLines={1}>
-        {format(parseISO(item.date), 'MMMM dd, yyyy')} at {item.locationMetadata.name}
-      </Text>
-      <Text style={styles.upcomingItemTime}>
-        {item.time ? format(parseISO(`1970-01-01T${item.time}`), 'p') : 'Time not set'}
-      </Text>
-    </View>
-    <View style={styles.statusContainer}>
-      <Ionicons name="checkmark-circle" size={20} color={colors.Success || '#28a745'} />
-      <Text style={styles.statusText}>Approved</Text>
-    </View>
-  </TouchableOpacity>
-);
+}) => {
+  const attractionType = getTypeOfAttraction(
+    item.romanticRating,
+    item.sexualRating,
+    item.friendshipRating
+  );
+
+  return (
+    <TouchableOpacity style={styles.upcomingItem} onPress={() => onPress(item)}>
+      <Avatar.Image size={52} source={{ uri: item.otherUser.profilePictureUrl }} />
+      <View style={styles.upcomingItemDetails}>
+        <Text style={styles.upcomingItemName} numberOfLines={1}>
+          {item.otherUser.firstName}
+        </Text>
+        <Text style={styles.upcomingItemInfo} numberOfLines={1}>
+          {format(parseISO(item.date), 'MMMM dd, yyyy')} at {item.locationMetadata.name}
+        </Text>
+        <Text style={styles.upcomingItemTime}>
+          {item.time ? format(parseISO(`1970-01-01T${item.time}`), 'p') : 'Time not set'}
+        </Text>
+        {(item.romanticRating > 0 || item.sexualRating > 0 || item.friendshipRating > 0) && (
+          <View style={styles.attractionTypeContainer}>
+            <Ionicons name="heart-circle" size={16} color={colors.PinkPrimary || '#f87171'} />
+            <Text style={styles.attractionTypeText}>{attractionType}</Text>
+          </View>
+        )}
+      </View>
+      <View style={styles.statusContainer}>
+        <Ionicons name="checkmark-circle" size={20} color={colors.Success || '#28a745'} />
+        <Text style={styles.statusText}>Approved</Text>
+      </View>
+    </TouchableOpacity>
+  );
+};
 
 const CalendarHomeScreen = () => {
   const { auth0User, logout, isReady: isAuthReady, isLoading: isAuthLoading } = useAuth();
-  const { tokenBalance } = useUserStore();
+  const { tokenBalance, userProfile } = useUserStore();
   const router = useRouter();
 
   const [isCalendarLoading, setIsCalendarLoading] = useState(true);
@@ -108,26 +130,16 @@ const CalendarHomeScreen = () => {
   const [upcomingDates, setUpcomingDates] = useState<UpcomingDate[]>([]);
   const [isUpcomingLoading, setIsUpcomingLoading] = useState(true);
   const [isRefreshing, setIsRefreshing] = useState(false);
-
-  // =====> CUSTOM POPUP KE LIYE STATE <=====
   const [popupState, setPopupState] = useState({
     visible: false,
     type: 'error' as 'success' | 'error',
     title: '',
     message: '',
   });
-  // ======================================
 
-  // =====> CUSTOM POPUP DIKHANE KE LIYE HELPER FUNCTION <=====
   const showPopup = (title: string, message: string, type: 'success' | 'error' = 'error') => {
-    setPopupState({
-      visible: true,
-      title,
-      message,
-      type,
-    });
+    setPopupState({ visible: true, title, message, type });
   };
-  // ========================================================
 
   const fetchAllScreenData = useCallback(async () => {
     if (!auth0User?.sub) {
@@ -146,11 +158,17 @@ const CalendarHomeScreen = () => {
         getUpcomingDates(),
         getUnreadNotificationsCount(),
       ]);
+
+      const initialDates = upcomingResponse.data.map((d) => ({
+        ...d,
+        romanticRating: 0,
+        sexualRating: 0,
+        friendshipRating: 0,
+      }));
       setCalendarData(calendarResponse.data);
-      setUpcomingDates(upcomingResponse.data);
+      setUpcomingDates(initialDates);
       setUnreadCount(countResponse.data.unreadCount);
     } catch (apiError: any) {
-      // Error ko Text ke bajaye Popup se dikhayein
       showPopup('Load Failed', 'Could not load your calendar data. Please try again.', 'error');
     } finally {
       setIsCalendarLoading(false);
@@ -164,6 +182,63 @@ const CalendarHomeScreen = () => {
       if (isAuthReady && !isAuthLoading) fetchAllScreenData();
     }, [isAuthReady, isAuthLoading, fetchAllScreenData])
   );
+
+  // ✅ NEW LOGIC: Fetch attractions after dates are loaded
+  useEffect(() => {
+    const fetchAttractionsForDates = async () => {
+      // Run only if we have dates, a user profile, and dates that haven't been processed yet
+      if (
+        upcomingDates.length === 0 ||
+        !userProfile?.userId ||
+        upcomingDates.some(
+          (d) => d.romanticRating > 0 || d.sexualRating > 0 || d.friendshipRating > 0
+        )
+      ) {
+        return;
+      }
+
+      const attractionPromises = upcomingDates.map((date) => {
+        // Determine the correct userFrom and userTo for the attraction query
+        const myId = userProfile.userId;
+        const otherId = date.otherUser.userId;
+
+        let userFrom, userTo;
+        if (date.userFrom === myId && date.userTo === otherId) {
+          userFrom = myId;
+          userTo = otherId;
+        } else {
+          userFrom = otherId;
+          userTo = myId;
+        }
+
+        return getAttractionByUserFromUserToAndDate(
+          userFrom, // Original proposer
+          userTo, // Original recipient
+          format(parseISO(date.date), 'yyyy-MM-dd')
+        ).catch(() => null); // If one fails, don't break the whole process
+      });
+
+      const attractionResults = await Promise.all(attractionPromises);
+
+      const datesWithAttractions = upcomingDates.map((date, index) => {
+        const attractionData = attractionResults[index]?.data;
+        if (attractionData) {
+          return {
+            ...date,
+            romanticRating: attractionData.romanticRating || 0,
+            sexualRating: attractionData.sexualRating || 0,
+            friendshipRating: attractionData.friendshipRating || 0,
+          };
+        }
+        return date;
+      });
+
+      setUpcomingDates(datesWithAttractions);
+    };
+
+    fetchAttractionsForDates();
+  }, [upcomingDates, userProfile?.userId]);
+
   const onRefresh = useCallback(() => {
     setIsRefreshing(true);
     if (isAuthReady) fetchAllScreenData();
@@ -228,7 +303,6 @@ const CalendarHomeScreen = () => {
             <ActivityIndicator size="large" color={colors.GoldPrimary} />
           </View>
         ) : (
-          // Error ab popup se handle hoga, isliye yahan se error check hata diya gaya hai
           <View style={styles.calendarGridContainer}>
             <VideoCalendar user={auth0User} calendarData={calendarData} />
           </View>
@@ -236,7 +310,7 @@ const CalendarHomeScreen = () => {
 
         <View style={styles.upcomingSection}>
           <Text style={styles.upcomingTitle}>Upcoming Dates</Text>
-          {isUpcomingLoading ? (
+          {isUpcomingLoading && upcomingDates.length === 0 ? (
             <ActivityIndicator color="#FFF" style={{ marginTop: 20 }} />
           ) : upcomingDates.length > 0 ? (
             <View style={styles.listContainer}>
@@ -256,7 +330,6 @@ const CalendarHomeScreen = () => {
         </View>
       </ScrollView>
 
-      {/* Naya popup render ho raha hai */}
       <BubblePopup
         visible={popupState.visible}
         type={popupState.type}
@@ -269,6 +342,7 @@ const CalendarHomeScreen = () => {
   );
 };
 
+// ... ALL STYLES REMAIN THE SAME ...
 const styles = StyleSheet.create({
   safeArea: {
     flex: 1,
@@ -276,7 +350,6 @@ const styles = StyleSheet.create({
     paddingTop: Platform.OS === 'android' ? 40 : 0,
   },
   loadingContainer: { flex: 1, justifyContent: 'center', alignItems: 'center' },
-  // errorText style ab zaroori nahi hai
   topHeader: {
     flexDirection: 'row',
     alignItems: 'center',
@@ -356,7 +429,13 @@ const styles = StyleSheet.create({
     fontSize: 12,
     fontWeight: '600',
   },
-  // --- NAYE BUBBLE POPUP KE STYLES ---
+  attractionTypeContainer: { flexDirection: 'row', alignItems: 'center', marginTop: 6 },
+  attractionTypeText: {
+    marginLeft: 6,
+    fontSize: 13,
+    color: colors.PinkPrimary || '#f87171',
+    fontWeight: '600',
+  },
   overlay: {
     flex: 1,
     backgroundColor: 'rgba(0, 0, 0, 0.7)',
@@ -364,18 +443,8 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     paddingHorizontal: 20,
   },
-  popupContainer: {
-    alignItems: 'center',
-    width: '100%',
-    maxWidth: 350,
-  },
-  popupImage: {
-    width: 220,
-    height: 220,
-    resizeMode: 'contain',
-    zIndex: 1,
-    marginBottom: -80,
-  },
+  popupContainer: { alignItems: 'center', width: '100%', maxWidth: 350 },
+  popupImage: { width: 220, height: 220, resizeMode: 'contain', zIndex: 1, marginBottom: -80 },
   bubble: {
     width: '90%',
     backgroundColor: '#FFFFFF',
@@ -409,22 +478,10 @@ const styles = StyleSheet.create({
     paddingHorizontal: 40,
     alignItems: 'center',
   },
-  errorButton: {
-    backgroundColor: colors.PinkPrimary || '#FF6B6B',
-  },
-  successButton: {
-    backgroundColor: colors.GoldPrimary || '#FFD700',
-  },
-  errorButtonText: {
-    color: colors.White || '#FFFFFF',
-    fontSize: 15,
-    fontWeight: 'bold',
-  },
-  successButtonText: {
-    color: colors.Black || '#000000',
-    fontSize: 15,
-    fontWeight: 'bold',
-  },
+  errorButton: { backgroundColor: colors.PinkPrimary || '#FF6B6B' },
+  successButton: { backgroundColor: colors.GoldPrimary || '#FFD700' },
+  errorButtonText: { color: colors.White || '#FFFFFF', fontSize: 15, fontWeight: 'bold' },
+  successButtonText: { color: colors.Black || '#000000', fontSize: 15, fontWeight: 'bold' },
 });
 
 export default CalendarHomeScreen;

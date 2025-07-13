@@ -1,12 +1,12 @@
 // File: src/repository/DatesRepository.ts
-// ✅ COMPLETE AND FINAL CORRECTED CODE (WITH THE FIX)
+// ✅ COMPLETE AND FINAL UPDATED CODE (with the temporary fix for testing)
 
 import pool from '../db'
-import { Date as DateType, CreateDateInternal, UpcomingDate } from '../types/Date'
+import { DateObject as DateType, CreateDateInternal, UpcomingDate } from '../types/Date'
 import { PoolClient } from 'pg'
 import * as humps from 'humps'
 
-// ... (mapRowToDate function remains the same)
+// mapRowToDate ab 'DateObject' expect karta hai aur usko 'DateType' banata hai.
 const mapRowToDate = (row: any): DateType | null => {
   if (!row) return null
   const camelized = humps.camelizeKeys(row)
@@ -27,7 +27,6 @@ const mapRowToDate = (row: any): DateType | null => {
 
 class DatesRepository {
   async getDateEntryByIdWithUserDetails(dateId: number): Promise<any | null> {
-    // ... (This function is correct and remains the same)
     const query = `
       SELECT 
         d.*,
@@ -43,22 +42,37 @@ class DatesRepository {
     return humps.camelizeKeys(rows[0])
   }
 
-  // ✅ THIS IS THE FIX: The date check condition is commented out for testing.
+  // This query is updated for easy testing.
   async getUpcomingDatesByUserId(userId: string): Promise<UpcomingDate[]> {
     console.log(`[DatesRepository] Fetching upcoming dates for user: ${userId}`)
     const query = `
       SELECT
-        d.date_id as "dateId", d.date, d.time, d.location_metadata as "locationMetadata",
+        d.date_id as "dateId", 
+        d.date, 
+        d.time, 
+        d.location_metadata as "locationMetadata",
+        d.user_from as "userFrom",
+        d.user_to as "userTo",
         CASE
-          WHEN d.user_from = $1 THEN json_build_object('userId', ut.user_id, 'firstName', ut.first_name, 'profilePictureUrl', ut.profile_picture_url)
-          ELSE json_build_object('userId', uf.user_id, 'firstName', uf.first_name, 'profilePictureUrl', uf.profile_picture_url)
+          WHEN d.user_from = $1 THEN 
+            json_build_object(
+              'userId', ut.user_id, 
+              'firstName', ut.first_name, 
+              'profilePictureUrl', ut.profile_picture_url
+            )
+          ELSE 
+            json_build_object(
+              'userId', uf.user_id, 
+              'firstName', uf.first_name, 
+              'profilePictureUrl', uf.profile_picture_url
+            )
         END as "otherUser"
       FROM dates d
       JOIN users uf ON d.user_from = uf.user_id
       JOIN users ut ON d.user_to = ut.user_id
       WHERE (d.user_from = $1 OR d.user_to = $1)
       AND d.status = 'approved'
-      -- AND d.date >= CURRENT_DATE -- Temporarily commented out for testing past dates
+      -- AND d.date >= CURRENT_DATE -- ✅ WAQTI TAUR PAR COMMENT KAR DIYA GAYA HAI, taake testing mein purani dates bhi nazar aayein.
       ORDER BY d.date ASC, d.time ASC;
     `
     try {
@@ -66,14 +80,13 @@ class DatesRepository {
       console.log(
         `[DatesRepository] SQL query found ${rows.length} dates with 'approved' status for user ${userId}.`,
       )
-      return rows
+      return rows as UpcomingDate[]
     } catch (error) {
       console.error(`[DatesRepository] Error executing getUpcomingDatesByUserId query:`, error)
       throw error
     }
   }
 
-  // ... (Rest of the file remains the same)
   async createDateEntry(
     dateEntry: CreateDateInternal,
     client: PoolClient | null = null,

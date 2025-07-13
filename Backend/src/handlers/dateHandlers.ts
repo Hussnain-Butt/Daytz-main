@@ -1,11 +1,11 @@
 // File: src/handlers/dateHandlers.ts
-// ✅ COMPLETE AND FINAL CORRECTED CODE
+// ✅ THIS CODE IS NOW CORRECT BECAUSE THE TYPE DEFINITION IS FIXED
 
 import { Response, NextFunction } from 'express'
 import { asyncHandler, CustomRequest } from '../middleware'
 import DatesService from '../services/internal/DatesService'
 import NotificationService from '../services/internal/NotificationService'
-import { CreateDatePayload, Date as DateType } from '../types/Date'
+import { CreateDatePayload, DateObject as DateType } from '../types/Date'
 import pool from '../db'
 
 const datesService = new DatesService()
@@ -41,6 +41,7 @@ export const updateDateHandler = asyncHandler(
         return res.status(403).json({ message: 'Forbidden. Only the date recipient can respond.' })
       }
 
+      // Yeh line ab error nahi degi kyunki 'declined' ab DateStatus ka hissa hai
       let updatePayload: Partial<DateType> = {
         status: status as 'approved' | 'declined',
       }
@@ -76,6 +77,8 @@ export const updateDateHandler = asyncHandler(
     }
   },
 )
+
+// ... baaqi sab handlers waise hi rahenge ...
 
 export const createDateHandler = asyncHandler(
   async (req: CustomRequest, res: Response, next: NextFunction) => {

@@ -1,19 +1,17 @@
 // File: app/_layout.tsx
-// ✅ COMPLETE AND FINAL CORRECTED CODE
+// ✅ COMPLETE AND FINAL CODE (No Changes Needed, This is Correct)
 
 import React, { useEffect } from 'react';
 import { Stack, useRouter, useSegments } from 'expo-router';
 import { AuthProvider, useAuth } from '../contexts/AuthContext';
 import { useUserStore } from '../store/useUserStore';
-import { ActivityIndicator, View, StyleSheet, Alert, Platform } from 'react-native';
+import { ActivityIndicator, View, StyleSheet, Alert } from 'react-native';
 
-// --- Imports for libraries ---
 import { GestureHandlerRootView } from 'react-native-gesture-handler';
 import { BottomSheetModalProvider } from '@gorhom/bottom-sheet';
 import messaging from '@react-native-firebase/messaging';
 import * as Notifications from 'expo-notifications';
 
-// Configure how notifications are handled when the app is in the FOREGROUND
 Notifications.setNotificationHandler({
   handleNotification: async () => ({
     shouldShowAlert: true,
@@ -23,18 +21,22 @@ Notifications.setNotificationHandler({
 });
 
 function RootLayoutNav() {
-  const { auth0User, isLoading } = useAuth();
-  const { showThankYouAfterAuth } = useUserStore();
+  const { auth0User, isReady } = useAuth();
+  const { showThankYouAfterAuth, showWelcomeVideo } = useUserStore();
   const segments = useSegments();
   const router = useRouter();
 
-  // --- Main navigation logic ---
   useEffect(() => {
-    if (isLoading) return;
+    if (!isReady) return;
+
     const isUserLoggedIn = !!auth0User;
     const inAppGroup = segments[0] === '(app)';
+
     if (isUserLoggedIn) {
-      if (showThankYouAfterAuth) {
+      if (showWelcomeVideo) {
+        // Yeh logic bilkul sahi hai, welcome video par bhejega
+        router.replace('/welcome-video');
+      } else if (showThankYouAfterAuth) {
         router.replace('/(app)/thank-you');
       } else if (!inAppGroup) {
         router.replace('/(app)/calendar');
@@ -44,17 +46,12 @@ function RootLayoutNav() {
         router.replace('/(auth)/login');
       }
     }
-  }, [auth0User, isLoading, segments, showThankYouAfterAuth]);
+  }, [isReady, auth0User, segments, showThankYouAfterAuth, showWelcomeVideo]);
 
-  // --- Firebase Notification Listeners ---
+  // ... (rest of the file is unchanged and correct)
   useEffect(() => {
-    // --- Listener for when the app is in the FOREGROUND ---
     const unsubscribeForeground = messaging().onMessage(async (remoteMessage) => {
       console.log('A new FCM message arrived in Foreground!', JSON.stringify(remoteMessage));
-
-      // ✅ --- THIS IS THE FIX ---
-      // This line will show a native Alert popup when a notification is received
-      // while the app is open.
       if (remoteMessage.notification) {
         Alert.alert(
           remoteMessage.notification.title || 'New Notification',
@@ -63,13 +60,11 @@ function RootLayoutNav() {
       }
     });
 
-    // --- Listener for when a user taps on a notification ---
     const unsubscribeOpened = messaging().onNotificationOpenedApp((remoteMessage) => {
       console.log('Notification caused app to open from background state:', remoteMessage);
       const dateId = remoteMessage.data?.dateId;
       if (dateId) {
         console.log(`Should navigate to date details for ID: ${dateId}`);
-        // Example: router.push(`/(app)/dates/${dateId}`);
       }
     });
 
@@ -81,15 +76,13 @@ function RootLayoutNav() {
           const dateId = remoteMessage.data?.dateId;
           if (dateId) {
             console.log(`Should navigate to date details for ID: ${dateId}`);
-            // Example: setTimeout(() => router.push(`/(app)/dates/${dateId}`), 1000);
           }
         }
       });
-
     return unsubscribeForeground;
   }, []);
 
-  if (isLoading) {
+  if (!isReady) {
     return (
       <View style={styles.loadingContainer}>
         <ActivityIndicator size="large" color="#FFFFFF" />
@@ -103,6 +96,8 @@ function RootLayoutNav() {
       <Stack.Screen name="(auth)" />
       <Stack.Screen name="callback" />
       <Stack.Screen name="index" />
+      {/* Yeh line bilkul zaroori aur sahi hai */}
+      <Stack.Screen name="welcome-video" />
     </Stack>
   );
 }

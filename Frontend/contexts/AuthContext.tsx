@@ -1,5 +1,5 @@
 // File: contexts/AuthContext.tsx
-// ✅ 100% COMPLETE AND FINAL CORRECTED CODE (with GUARANTEED timing fix)
+// ✅ 100% COMPLETE AND FINAL CORRECTED CODE (With Welcome Video Logic)
 
 import 'react-native-get-random-values';
 import React, {
@@ -21,7 +21,6 @@ import * as WebBrowser from 'expo-web-browser';
 import axios from 'axios';
 import messaging from '@react-native-firebase/messaging';
 
-// --- Types and Configuration ---
 interface SessionData {
   accessToken: string;
   refreshToken: string | null;
@@ -33,16 +32,16 @@ const AUTH_SESSION_KEY = 'daytzFinalAuthSession_v1';
 const apiAudience = 'https://api.daytz.app/v1';
 
 const getApiBaseUrl = (): string => {
-  const envApiUrl = 'http://192.168.1.11:3000/api';
+  const envApiUrl = 'https://backend-production-6a76.up.railway.app/api';
   if (envApiUrl) return envApiUrl;
   if (Platform.OS === 'android') return 'http://10.0.2.2:3000/api';
   return 'http://localhost:3000/api';
 };
 const API_BASE_URL = getApiBaseUrl();
+console.log('✅ API: Final API_BASE_URL is:', API_BASE_URL);
 
 WebBrowser.maybeCompleteAuthSession();
 
-// --- Context Definition ---
 interface AuthContextData {
   auth0User: any | null;
   isReady: boolean;
@@ -59,7 +58,6 @@ const AuthContext = createContext<AuthContextData>({
 });
 export const useAuth = () => useContext(AuthContext);
 
-// --- Auth Provider Component ---
 export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) => {
   const discovery = AuthSession.useAutoDiscovery(`https://${auth0Domain}`);
   const [auth0User, setAuth0User] = useState<any | null>(null);
@@ -67,11 +65,18 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
   const [isLoading, setIsLoading] = useState<boolean>(true);
   const [isReady, setIsReady] = useState<boolean>(false);
   const processedCodeRef = useRef<string | null>(null);
-  const { setUserProfile, setTokenBalance, clearUserProfile, setShowThankYouAfterAuth } =
-    useUserStore();
+
+  const {
+    setUserProfile,
+    setTokenBalance,
+    clearUserProfile,
+    setShowThankYouAfterAuth,
+    setShowWelcomeVideo,
+  } = useUserStore();
+
   const redirectUri = AuthSession.makeRedirectUri({ scheme: 'com.daytz.app', path: 'callback' });
   const getAccessTokenRef = useRef<GetAccessTokenFunc>(async () => undefined);
-  const hasRegisteredToken = useRef(false); // To prevent multiple registrations per session
+  const hasRegisteredToken = useRef(false);
 
   const [request, response, promptAsync] = AuthSession.useAuthRequest(
     {
@@ -88,10 +93,9 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
   const performLogoutCleanup = useCallback(
     async (initiator?: string) => {
       console.log(`AuthContext: Local logout shuru. Wajah: ${initiator || 'N/A'}`);
-      hasRegisteredToken.current = false; // Reset for next login
+      hasRegisteredToken.current = false;
       setAuth0User(null);
       setSession(null);
-      setIsReady(false);
       clearUserProfile();
       await deleteItemAsync(AUTH_SESSION_KEY);
     },
@@ -99,7 +103,10 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
   );
 
   const checkAndSetupDbProfile = useCallback(
-    async (auth0UserInfo: any, accessToken: string): Promise<boolean> => {
+    async (
+      auth0UserInfo: any,
+      accessToken: string
+    ): Promise<{ success: boolean; isNewUser: boolean }> => {
       const tempApiClient = axios.create({
         baseURL: API_BASE_URL,
         headers: { Authorization: `Bearer ${accessToken}` },
@@ -108,8 +115,7 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
       try {
         const response = await tempApiClient.get(`/users/${auth0UserInfo.sub}`);
         setUserProfile(response.data);
-        setTokenBalance(response.data.tokens);
-        return true;
+        return { success: true, isNewUser: false };
       } catch (error: any) {
         if (axios.isAxiosError(error) && error.response?.status === 404) {
           try {
@@ -123,17 +129,17 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
             const createResponse = await tempApiClient.post('/users', newUserPayload);
             if (createResponse.data?.userId) {
               setUserProfile(createResponse.data);
-              setTokenBalance(createResponse.data.tokens || 0);
-              return true;
+              return { success: true, isNewUser: true };
             }
           } catch (createError) {
-            /* ... */
+            console.error('Failed to create user in DB:', createError);
           }
         }
-        return false;
+        console.error('Failed to check/setup DB profile:', error);
+        return { success: false, isNewUser: false };
       }
     },
-    [setUserProfile, setTokenBalance]
+    [setUserProfile]
   );
 
   const getAccessToken = useCallback(async (): Promise<string | undefined> => {
@@ -143,13 +149,15 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
       return s;
     });
     if (!currentSession) return undefined;
-    if (Date.now() < currentSession.expiresAt - 60000) return currentSession.accessToken;
+    if (Date.now() < currentSession.expiresAt - 60000) {
+      return currentSession.accessToken;
+    }
     if (!currentSession.refreshToken) {
       await performLogoutCleanup('no_refresh_token');
       return undefined;
     }
     try {
-      if (!discovery) throw new Error('Discovery document not available.');
+      if (!discovery) throw new Error('Discovery document not available for refresh.');
       const refreshedCreds = await AuthSession.refreshAsync(
         { clientId: auth0ClientId, refreshToken: currentSession.refreshToken },
         discovery
@@ -164,6 +172,7 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
       setSession(newSession);
       return newSession.accessToken;
     } catch (error) {
+      console.error('Token refresh failed:', error);
       await performLogoutCleanup('refresh_failed');
       return undefined;
     }
@@ -172,7 +181,9 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
   useEffect(() => {
     getAccessTokenRef.current = getAccessToken;
   }, [getAccessToken]);
+
   useEffect(() => {
+    console.log('[API] Configuring Axios interceptor with token provider.');
     configureApiClient(() => getAccessTokenRef.current());
   }, []);
 
@@ -187,8 +198,10 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
         });
         if (!userInfoResponse.ok) throw new Error('User info fetch failed');
         const userInfo = await userInfoResponse.json();
-        const dbProfileOk = await checkAndSetupDbProfile(userInfo, creds.accessToken);
-        if (dbProfileOk) {
+
+        const profileResult = await checkAndSetupDbProfile(userInfo, creds.accessToken);
+
+        if (profileResult.success) {
           const expiresAt = (creds.issuedAt + (creds.expiresIn || 0)) * 1000;
           const newSession: SessionData = {
             accessToken: creds.accessToken,
@@ -198,18 +211,34 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
           await setItemAsync(AUTH_SESSION_KEY, JSON.stringify(newSession));
           setSession(newSession);
           setAuth0User(userInfo);
-          setShowThankYouAfterAuth(true);
+
+          if (profileResult.isNewUser) {
+            setShowWelcomeVideo(true);
+            setShowThankYouAfterAuth(false);
+          } else {
+            setShowWelcomeVideo(false);
+            setShowThankYouAfterAuth(true);
+          }
           setIsReady(true);
         } else {
           await performLogoutCleanup('db_setup_failed');
+          setIsReady(true);
         }
       } catch (error) {
+        console.error('Error setting authenticated session:', error);
         await performLogoutCleanup('setAuthenticatedSession_failure');
+        setIsReady(true);
       } finally {
         setIsLoading(false);
       }
     },
-    [discovery, checkAndSetupDbProfile, performLogoutCleanup, setShowThankYouAfterAuth]
+    [
+      discovery,
+      checkAndSetupDbProfile,
+      performLogoutCleanup,
+      setShowThankYouAfterAuth,
+      setShowWelcomeVideo,
+    ]
   );
 
   useEffect(() => {
@@ -231,9 +260,15 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
         discovery
       )
         .then(setAuthenticatedSession)
-        .catch((e) => console.error('Token exchange fail:', e));
+        .catch((e) => {
+          console.error('Token exchange fail:', e);
+          setIsLoading(false);
+          setIsReady(true);
+        });
     } else if (response?.type === 'error') {
       console.error('AuthSession error:', response.error);
+      setIsLoading(false);
+      setIsReady(true);
     }
   }, [response, request, discovery, redirectUri, setAuthenticatedSession]);
 
@@ -243,19 +278,17 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
       setIsLoading(true);
       try {
         const sessionJson = await getItemAsync(AUTH_SESSION_KEY);
-        if (!sessionJson) {
-          setIsReady(true);
-          return;
-        }
+        if (!sessionJson) throw new Error('No session stored.');
         let currentSession: SessionData = JSON.parse(sessionJson);
         if (Date.now() >= currentSession.expiresAt - 60000) {
-          if (!currentSession.refreshToken) throw new Error('Session expired.');
+          if (!currentSession.refreshToken) throw new Error('Session expired, no refresh token.');
           const refreshed = await AuthSession.refreshAsync(
             { clientId: auth0ClientId, refreshToken: currentSession.refreshToken },
             discovery
           );
           currentSession = {
-            ...refreshed,
+            accessToken: refreshed.accessToken,
+            refreshToken: refreshed.refreshToken || currentSession.refreshToken,
             expiresAt: (refreshed.issuedAt + (refreshed.expiresIn || 0)) * 1000,
           };
           await setItemAsync(AUTH_SESSION_KEY, JSON.stringify(currentSession));
@@ -266,23 +299,27 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
         });
         if (!userInfoRes.ok) throw new Error('User info fetch failed on load.');
         const userInfo = await userInfoRes.json();
-        if (await checkAndSetupDbProfile(userInfo, currentSession.accessToken)) {
+        const dbProfileResult = await checkAndSetupDbProfile(userInfo, currentSession.accessToken);
+
+        if (dbProfileResult.success) {
           setAuth0User(userInfo);
-          setIsReady(true);
+          setShowWelcomeVideo(false); // On regular load, never show welcome video
         } else {
           throw new Error('DB profile setup failed on load.');
         }
       } catch (error) {
+        console.log(
+          `Initial auth load failed: ${error instanceof Error ? error.message : String(error)}`
+        );
         await performLogoutCleanup('initial_load_exception');
       } finally {
         setIsLoading(false);
+        setIsReady(true);
       }
     };
     loadAuthData();
-  }, [discovery, checkAndSetupDbProfile, performLogoutCleanup]);
+  }, [discovery]);
 
-  // ✅ --- THIS IS THE NEW, GUARANTEED SOLUTION ---
-  // This useEffect will ONLY run when the user is fully authenticated and ready.
   useEffect(() => {
     const setupPushNotifications = async () => {
       try {
@@ -292,41 +329,44 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
           console.log('[FCM] Device Token:', fcmToken);
           await registerPushToken(fcmToken);
           console.log('[FCM] Token successfully registered with backend.');
-          hasRegisteredToken.current = true; // Mark as registered
+          hasRegisteredToken.current = true;
         }
       } catch (error) {
         console.error('[FCM] Failed to setup push notifications:', error);
       }
     };
-
-    // Check conditions: Auth must be ready, a user must be logged in, AND we haven't registered the token in this session yet.
     if (isReady && auth0User && !hasRegisteredToken.current) {
       console.log('[AuthContext] User is authenticated and ready. Setting up push notifications.');
       setupPushNotifications();
     }
-  }, [isReady, auth0User]); // Dependencies ensure this runs at the right time.
+  }, [isReady, auth0User]);
 
   const login = useCallback(async () => {
     if (isLoading || !request) return;
     await promptAsync();
   }, [isLoading, request, promptAsync]);
+
   const logout = useCallback(async () => {
+    setIsLoading(true);
     const returnTo = AuthSession.makeRedirectUri({
       scheme: 'com.daytz.app',
       path: 'logout-complete',
     });
     const logoutUrl = `https://${auth0Domain}/v2/logout?client_id=${auth0ClientId}&returnTo=${encodeURIComponent(returnTo)}`;
     try {
-      if (session?.accessToken && discovery)
+      if (session?.accessToken && discovery) {
         await AuthSession.revokeAsync(
           { token: session.accessToken, clientId: auth0ClientId },
           discovery
         );
+      }
       await WebBrowser.openAuthSessionAsync(logoutUrl, returnTo);
     } catch (e) {
-      /* ... */
+      console.error('Logout error:', e);
     } finally {
       await performLogoutCleanup('logout_end_process');
+      setIsReady(true);
+      setIsLoading(false);
     }
   }, [session, discovery, performLogoutCleanup]);
 

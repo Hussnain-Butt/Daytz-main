@@ -1,10 +1,12 @@
 // File: src/services/internal/DatesService.ts
-// ✅ COMPLETE AND FINAL UPDATED CODE
+// ✅ COMPLETE AND FINAL CORRECTED CODE
 
 import pool from '../../db'
 import {
-  Date as DateType,
+  // ✅ FIX: Changed 'Date' to 'DateObject'
+  DateObject as DateType,
   CreateDatePayload,
+  // ✅ FIX: 'CreateDateInternal' can now be correctly imported
   CreateDateInternal,
   UpcomingDate,
 } from '../../types/Date'
@@ -29,7 +31,6 @@ class DatesService {
     return this.dateRepository.getDateEntryByIdWithUserDetails(dateId)
   }
 
-  // ✅ THIS METHOD CORRECTLY CALLS THE REPOSITORY
   async getUpcomingDatesByUserId(userId: string): Promise<UpcomingDate[]> {
     return this.dateRepository.getUpcomingDatesByUserId(userId)
   }

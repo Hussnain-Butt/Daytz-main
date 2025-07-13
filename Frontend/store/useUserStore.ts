@@ -9,11 +9,12 @@ import { getUserById, getUserTokenBalance as fetchTokenBalanceApi } from '../api
 interface UserState {
   userProfile: User | null;
   tokenBalance: number | null;
-  isLoggedIn: boolean; // Flag to track login status
+  isLoggedIn: boolean;
   isFetchingTokenBalance: boolean;
   isFetchingUserProfile: boolean;
   profileJustCompletedForNav: boolean;
   showThankYouAfterAuth: boolean;
+  showWelcomeVideo: boolean; // ✅ NAYI STATE
 
   setUserProfile: (profile: User | null) => void;
   updateUserProfileOptimistic: (updates: Partial<User>) => void;
@@ -23,7 +24,8 @@ interface UserState {
   setIsFetchingUserProfile: (isFetching: boolean) => void;
   setProfileJustCompletedForNav: (isCompleted: boolean) => void;
   setShowThankYouAfterAuth: (show: boolean) => void;
-  clearShowThankYouAfterAuth: () => void; // ✅ NEW: Action to explicitly clear this flag
+  clearShowThankYouAfterAuth: () => void;
+  setShowWelcomeVideo: (show: boolean) => void; // ✅ NAYA SETTER
 }
 
 // 2. Create the store
@@ -31,11 +33,12 @@ export const useUserStore = create<UserState>((set) => ({
   // --- Initial State ---
   userProfile: null,
   tokenBalance: null,
-  isLoggedIn: false, // Default to false
+  isLoggedIn: false,
   isFetchingTokenBalance: false,
   isFetchingUserProfile: false,
   profileJustCompletedForNav: false,
   showThankYouAfterAuth: false,
+  showWelcomeVideo: false, // ✅ Default value
 
   // --- Actions ---
   setUserProfile: (profile) => {
@@ -43,7 +46,7 @@ export const useUserStore = create<UserState>((set) => ({
     if (profile) {
       set({
         userProfile: profile,
-        isLoggedIn: true, // Set isLoggedIn to true on setting a profile
+        isLoggedIn: true,
         isFetchingUserProfile: false,
         tokenBalance: typeof profile.tokens === 'number' ? profile.tokens : null,
       });
@@ -53,7 +56,6 @@ export const useUserStore = create<UserState>((set) => ({
         );
       }
     } else {
-      // If profile is null, this is a part of logout/error flow, clear everything
       set({
         userProfile: null,
         tokenBalance: null,
@@ -70,17 +72,17 @@ export const useUserStore = create<UserState>((set) => ({
     });
   },
 
-  // This function is called on logout. It must reset EVERYTHING to its initial state.
   clearUserProfile: () => {
     console.log('useUserStore: Clearing all user state and setting isLoggedIn to false.');
     set({
       userProfile: null,
       tokenBalance: null,
-      isLoggedIn: false, // Explicitly set to false
+      isLoggedIn: false,
       isFetchingTokenBalance: false,
       isFetchingUserProfile: false,
       profileJustCompletedForNav: false,
-      showThankYouAfterAuth: false, // Ensure this is also reset on full logout
+      showThankYouAfterAuth: false,
+      showWelcomeVideo: false, // ✅ Yahan bhi reset karein
     });
   },
 
@@ -89,29 +91,26 @@ export const useUserStore = create<UserState>((set) => ({
   setIsFetchingUserProfile: (isFetching) => set({ isFetchingUserProfile: isFetching }),
   setProfileJustCompletedForNav: (isCompleted) => set({ profileJustCompletedForNav: isCompleted }),
   setShowThankYouAfterAuth: (show) => set({ showThankYouAfterAuth: show }),
-  // ✅ NEW ACTION: Resets only the showThankYouAfterAuth flag
   clearShowThankYouAfterAuth: () => {
     console.log('useUserStore: Clearing showThankYouAfterAuth flag.');
     set({ showThankYouAfterAuth: false });
   },
+  // ✅ NAYA SETTER FUNCTION
+  setShowWelcomeVideo: (show) => set({ showWelcomeVideo: show }),
 }));
 
-// --- Helper Functions to interact with the store ---
+// --- Helper Functions (No changes needed here) ---
 
 export const fetchAndSetUserProfile = async (userId: string): Promise<User | null> => {
   const { isFetchingUserProfile, setIsFetchingUserProfile, setUserProfile } =
     useUserStore.getState();
-
   if (isFetchingUserProfile) {
     console.log('fetchAndSetUserProfile: Already fetching profile. Aborting.');
     return useUserStore.getState().userProfile;
   }
-
   setIsFetchingUserProfile(true);
-
   try {
     const response = await getUserById(userId);
-
     if (response.data) {
       console.log(`fetchAndSetUserProfile: API Success for ${userId}. Updating store.`);
       setUserProfile(response.data);
@@ -125,7 +124,6 @@ export const fetchAndSetUserProfile = async (userId: string): Promise<User | nul
     }
   } catch (error: any) {
     console.error(`fetchAndSetUserProfile: CRITICAL Error for ${userId}:`, error.message);
-    // On critical error, also clear the profile to prevent using stale data
     useUserStore.getState().setUserProfile(null);
     throw error;
   } finally {
@@ -136,19 +134,11 @@ export const fetchAndSetUserProfile = async (userId: string): Promise<User | nul
 export const fetchAndUpdateTokenBalance = async (): Promise<number | null> => {
   const { userProfile, setIsFetchingTokenBalance, setTokenBalance, isFetchingTokenBalance } =
     useUserStore.getState();
-
-  if (!userProfile?.userId) {
-    return null;
-  }
-  if (isFetchingTokenBalance) {
-    return useUserStore.getState().tokenBalance;
-  }
-
+  if (!userProfile?.userId) return null;
+  if (isFetchingTokenBalance) return useUserStore.getState().tokenBalance;
   setIsFetchingTokenBalance(true);
-
   try {
     const response = await fetchTokenBalanceApi();
-
     if (response.data && typeof response.data.tokenBalance === 'number') {
       const newBalance = response.data.tokenBalance;
       setTokenBalance(newBalance);
