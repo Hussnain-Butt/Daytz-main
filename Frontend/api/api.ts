@@ -1,5 +1,5 @@
 // File: api/api.ts
-// ✅ COMPLETE AND FINAL UPDATED CODE
+// ✅ COMPLETE AND FINAL UPDATED CODE (with explicit header control)
 
 import axios, { AxiosInstance, AxiosProgressEvent, AxiosResponse } from 'axios';
 import { Platform } from 'react-native';
@@ -15,7 +15,7 @@ import {
 } from '../types/Attraction';
 
 const getApiBaseUrl = (): string => {
-  const envApiUrl = 'https://backend-production-6a76.up.railway.app/api';
+  const envApiUrl = 'http://192.168.1.9:3000/api';
   if (envApiUrl) return envApiUrl;
   if (Platform.OS === 'android') return 'http://10.0.2.2:3000/api';
   return 'http://localhost:3000/api';
@@ -28,12 +28,37 @@ const apiClient: AxiosInstance = axios.create({ baseURL: API_BASE_URL, timeout: 
 
 export type GetAccessTokenFunc = () => Promise<string | null | undefined>;
 
+/**
+ * ✅ NEW: Explicitly sets or removes the Authorization header.
+ * This is crucial for robustly handling login and logout state changes.
+ * @param token The bearer token, or null to remove the header.
+ */
+export const setApiClientAuthHeader = (token: string | null) => {
+  if (token) {
+    console.log('[API] Setting Axios auth header.');
+    apiClient.defaults.headers.common['Authorization'] = `Bearer ${token}`;
+  } else {
+    console.log('[API] Clearing Axios auth header.');
+    delete apiClient.defaults.headers.common['Authorization'];
+  }
+};
+
+/**
+ * Configures an interceptor to transparently handle token fetching/refreshing for API calls.
+ * This works alongside the explicit `setApiClientAuthHeader` function.
+ */
 export const configureApiClient = (getAccessTokenFunc: GetAccessTokenFunc) => {
   console.log('[API] Configuring Axios interceptor with token provider.');
   apiClient.interceptors.request.use(
     async (config) => {
-      const token = await getAccessTokenFunc();
-      if (token) config.headers.Authorization = `Bearer ${token}`;
+      // If a header is not already set, try to get one.
+      // This is useful for token refreshes.
+      if (!config.headers.Authorization) {
+        const token = await getAccessTokenFunc();
+        if (token) {
+          config.headers.Authorization = `Bearer ${token}`;
+        }
+      }
       return config;
     },
     (error) => Promise.reject(error)
@@ -96,7 +121,6 @@ export const getMyNotifications = async (): Promise<AxiosResponse<Notification[]
   }
 };
 
-// ✅ THIS FUNCTION FIXES THE FRONTEND ERROR
 export const getUnreadNotificationsCount = async (): Promise<
   AxiosResponse<UnreadCountResponse>
 > => {
@@ -181,12 +205,10 @@ export const createDate = async (
   }
 };
 
-// ✅ UPDATED to return the detailed object type
 export const getDateById = async (
   dateId: string
 ): Promise<AxiosResponse<DetailedDateObject | null>> => {
   try {
-    // The backend now returns a more detailed object, which we type here
     return await apiClient.get<DetailedDateObject>(`/dates/${dateId}`);
   } catch (e: any) {
     if (axios.isAxiosError(e) && e.response?.status === 404)
@@ -310,7 +332,6 @@ export const getPlayableVideoUrl = async (identifier: {
   }
 };
 
-// ✅ NEW FUNCTION for the upcoming dates list
 export const getUpcomingDates = async (): Promise<AxiosResponse<UpcomingDate[]>> => {
   try {
     return await apiClient.get<UpcomingDate[]>(`/dates/me/upcoming`);

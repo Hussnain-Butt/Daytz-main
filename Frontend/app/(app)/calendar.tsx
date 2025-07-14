@@ -1,5 +1,5 @@
 // File: app/(app)/calendar.tsx
-// ✅ COMPLETE AND FINAL UPDATED CODE (with new, reliable fetching logic)
+// ⚠️ TEMPORARY FIX: Reverting to less efficient data fetching to make attractions work.
 
 import React, { useState, useCallback, useEffect } from 'react';
 import {
@@ -23,7 +23,7 @@ import {
   getCalendarDaysByUserId,
   getUnreadNotificationsCount,
   getUpcomingDates,
-  getAttractionByUserFromUserToAndDate,
+  getAttractionByUserFromUserToAndDate, // ✅ 1. Import wapas add karein
 } from '../../api/api';
 import { CalendarDay } from '../../types/CalendarDay';
 import { UpcomingDate } from '../../types/Date';
@@ -32,6 +32,7 @@ import { format, parseISO } from 'date-fns';
 import { Avatar } from 'react-native-paper';
 import { Ionicons } from '@expo/vector-icons';
 
+// ... (BubblePopup, getTypeOfAttraction, UpcomingDateItem components same rahenge)
 const LOGO_IMAGE = require('../../assets/brand.png');
 const COIN_ICON = require('../../assets/match.png');
 const NOTIFICATION_ICON = require('../../assets/notification_bell_icon.png');
@@ -121,7 +122,7 @@ const UpcomingDateItem = ({
 
 const CalendarHomeScreen = () => {
   const { auth0User, logout, isReady: isAuthReady, isLoading: isAuthLoading } = useAuth();
-  const { tokenBalance, userProfile } = useUserStore();
+  const { tokenBalance, userProfile } = useUserStore(); // ✅ 2. userProfile ko wapas add karein
   const router = useRouter();
 
   const [isCalendarLoading, setIsCalendarLoading] = useState(true);
@@ -159,12 +160,14 @@ const CalendarHomeScreen = () => {
         getUnreadNotificationsCount(),
       ]);
 
+      // ✅ 3. Data ko initial ratings ke saath map karein
       const initialDates = upcomingResponse.data.map((d) => ({
         ...d,
         romanticRating: 0,
         sexualRating: 0,
         friendshipRating: 0,
       }));
+
       setCalendarData(calendarResponse.data);
       setUpcomingDates(initialDates);
       setUnreadCount(countResponse.data.unreadCount);
@@ -183,14 +186,14 @@ const CalendarHomeScreen = () => {
     }, [isAuthReady, isAuthLoading, fetchAllScreenData])
   );
 
-  // ✅ NEW LOGIC: Fetch attractions after dates are loaded
+  // ✅ 4. Yeh poora useEffect block wapas add karein
   useEffect(() => {
     const fetchAttractionsForDates = async () => {
-      // Run only if we have dates, a user profile, and dates that haven't been processed yet
       if (
         upcomingDates.length === 0 ||
         !userProfile?.userId ||
-        upcomingDates.some(
+        upcomingDates.every(
+          // Use .every() to check if all are processed
           (d) => d.romanticRating > 0 || d.sexualRating > 0 || d.friendshipRating > 0
         )
       ) {
@@ -198,7 +201,6 @@ const CalendarHomeScreen = () => {
       }
 
       const attractionPromises = upcomingDates.map((date) => {
-        // Determine the correct userFrom and userTo for the attraction query
         const myId = userProfile.userId;
         const otherId = date.otherUser.userId;
 
@@ -212,10 +214,10 @@ const CalendarHomeScreen = () => {
         }
 
         return getAttractionByUserFromUserToAndDate(
-          userFrom, // Original proposer
-          userTo, // Original recipient
+          userFrom,
+          userTo,
           format(parseISO(date.date), 'yyyy-MM-dd')
-        ).catch(() => null); // If one fails, don't break the whole process
+        ).catch(() => null);
       });
 
       const attractionResults = await Promise.all(attractionPromises);
@@ -342,7 +344,6 @@ const CalendarHomeScreen = () => {
   );
 };
 
-// ... ALL STYLES REMAIN THE SAME ...
 const styles = StyleSheet.create({
   safeArea: {
     flex: 1,

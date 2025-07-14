@@ -1,5 +1,5 @@
 // File: contexts/AuthContext.tsx
-// ✅ 100% COMPLETE AND FINAL CORRECTED CODE (With Welcome Video Logic)
+// ✅ 100% COMPLETE AND FINAL CORRECTED CODE (Fixes session mixing bug)
 
 import 'react-native-get-random-values';
 import React, {
@@ -12,10 +12,15 @@ import React, {
   useCallback,
   useRef,
 } from 'react';
-import { Alert, Platform } from 'react-native';
+import { Platform } from 'react-native';
 import { getItemAsync, setItemAsync, deleteItemAsync } from 'expo-secure-store';
 import { useUserStore } from '../store/useUserStore';
-import { configureApiClient, GetAccessTokenFunc, registerPushToken } from '../api/api';
+import {
+  configureApiClient,
+  setApiClientAuthHeader, // ✅ CRITICAL: Import the new function
+  GetAccessTokenFunc,
+  registerPushToken,
+} from '../api/api';
 import * as AuthSession from 'expo-auth-session';
 import * as WebBrowser from 'expo-web-browser';
 import axios from 'axios';
@@ -32,7 +37,7 @@ const AUTH_SESSION_KEY = 'daytzFinalAuthSession_v1';
 const apiAudience = 'https://api.daytz.app/v1';
 
 const getApiBaseUrl = (): string => {
-  const envApiUrl = 'https://backend-production-6a76.up.railway.app/api';
+  const envApiUrl = 'http://192.168.1.9:3000/api';
   if (envApiUrl) return envApiUrl;
   if (Platform.OS === 'android') return 'http://10.0.2.2:3000/api';
   return 'http://localhost:3000/api';
@@ -66,13 +71,8 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
   const [isReady, setIsReady] = useState<boolean>(false);
   const processedCodeRef = useRef<string | null>(null);
 
-  const {
-    setUserProfile,
-    setTokenBalance,
-    clearUserProfile,
-    setShowThankYouAfterAuth,
-    setShowWelcomeVideo,
-  } = useUserStore();
+  const { clearUserProfile, setShowThankYouAfterAuth, setShowWelcomeVideo, setUserProfile } =
+    useUserStore();
 
   const redirectUri = AuthSession.makeRedirectUri({ scheme: 'com.daytz.app', path: 'callback' });
   const getAccessTokenRef = useRef<GetAccessTokenFunc>(async () => undefined);
@@ -96,6 +96,10 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
       hasRegisteredToken.current = false;
       setAuth0User(null);
       setSession(null);
+
+      // ✅ CRITICAL: Purge the token from the live Axios instance to prevent session mixing.
+      setApiClientAuthHeader(null);
+
       clearUserProfile();
       await deleteItemAsync(AUTH_SESSION_KEY);
     },
@@ -169,6 +173,10 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
         expiresAt,
       };
       await setItemAsync(AUTH_SESSION_KEY, JSON.stringify(newSession));
+
+      // ✅ CRITICAL: Update the header after a token refresh.
+      setApiClientAuthHeader(newSession.accessToken);
+
       setSession(newSession);
       return newSession.accessToken;
     } catch (error) {
@@ -193,6 +201,7 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
       try {
         if (!creds.accessToken || !discovery?.userInfoEndpoint)
           throw new Error('Token or endpoint not found.');
+
         const userInfoResponse = await fetch(discovery.userInfoEndpoint, {
           headers: { Authorization: `Bearer ${creds.accessToken}` },
         });
@@ -209,6 +218,10 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
             expiresAt,
           };
           await setItemAsync(AUTH_SESSION_KEY, JSON.stringify(newSession));
+
+          // ✅ CRITICAL: Inject the new token into the live Axios instance immediately upon login.
+          setApiClientAuthHeader(newSession.accessToken);
+
           setSession(newSession);
           setAuth0User(userInfo);
 
@@ -293,6 +306,10 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
           };
           await setItemAsync(AUTH_SESSION_KEY, JSON.stringify(currentSession));
         }
+
+        // ✅ CRITICAL: Set the header for the restored session.
+        setApiClientAuthHeader(currentSession.accessToken);
+
         setSession(currentSession);
         const userInfoRes = await fetch(discovery.userInfoEndpoint!, {
           headers: { Authorization: `Bearer ${currentSession.accessToken}` },
@@ -303,7 +320,7 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
 
         if (dbProfileResult.success) {
           setAuth0User(userInfo);
-          setShowWelcomeVideo(false); // On regular load, never show welcome video
+          setShowWelcomeVideo(false);
         } else {
           throw new Error('DB profile setup failed on load.');
         }
@@ -318,7 +335,13 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
       }
     };
     loadAuthData();
-  }, [discovery]);
+  }, [
+    discovery,
+    checkAndSetupDbProfile,
+    performLogoutCleanup,
+    setUserProfile,
+    setShowWelcomeVideo,
+  ]);
 
   useEffect(() => {
     const setupPushNotifications = async () => {
