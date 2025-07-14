@@ -1,13 +1,45 @@
 // File: src/services/internal/NotificationService.ts
-// ✅ COMPLETE AND FINAL CORRECTED CODE
+// ✅ COMPLETE AND FINAL CORRECTED CODE (Typo Fixed)
 
 import * as admin from 'firebase-admin'
 import { Pool, QueryResult } from 'pg'
 import pool from '../../db'
-import * as path from 'path'
 
-const serviceAccountPath = path.join(__dirname, '..', '..', 'firebase-service-account-key.json')
-const serviceAccount = require(serviceAccountPath)
+// --- Firebase Initialization Logic ---
+// Check if Firebase app is already initialized
+if (!admin.apps.length) {
+  // 1. Get the service account JSON string from the environment variable.
+  const serviceAccountString = process.env.FIREBASE_SERVICE_ACCOUNT
+
+  // 2. Add a critical check to ensure the variable is set.
+  if (!serviceAccountString) {
+    console.error(
+      '[Firebase Admin] FATAL ERROR: The FIREBASE_SERVICE_ACCOUNT environment variable is not set.',
+    )
+    throw new Error(
+      'Firebase service account credentials are not available in environment variables.',
+    )
+  }
+
+  try {
+    // 3. Parse the JSON string into a JavaScript object.
+    const serviceAccount = JSON.parse(serviceAccountString)
+
+    // 4. Initialize Firebase Admin SDK with the parsed credentials.
+    admin.initializeApp({
+      credential: admin.credential.cert(serviceAccount),
+    })
+    console.log(
+      '[NotificationService] Firebase Admin SDK initialized successfully from environment variable.',
+    )
+  } catch (error) {
+    console.error(
+      '[Firebase Admin] FATAL ERROR: Failed to parse or use FIREBASE_SERVICE_ACCOUNT. Check if the variable contains valid JSON.',
+      error,
+    )
+    throw new Error('Failed to initialize Firebase Admin SDK.')
+  }
+}
 
 interface SenderProfileInfo {
   userId: string
@@ -27,10 +59,8 @@ class NotificationService {
   private db: Pool
 
   constructor() {
-    if (!admin.apps.length) {
-      admin.initializeApp({ credential: admin.credential.cert(serviceAccount) })
-      console.log('[NotificationService] Firebase Admin SDK initialized.')
-    }
+    // The initialization is now done outside the class to ensure it runs only once.
+    // The constructor now only sets up the database pool.
     this.db = pool
   }
 
@@ -128,6 +158,7 @@ class NotificationService {
     if (!userFromProfile || !userToProfile) return
 
     const fromName = `${userFromProfile.firstName || ''}`.trim() || 'Someone'
+    // ✅ FIX: Yahan 'userToFosile' ko theek karke 'userToProfile' kar diya gaya hai.
     const toName = `${userToProfile.firstName || ''}`.trim() || 'Someone'
 
     // Notification for the person who initiated the match
@@ -213,7 +244,5 @@ class NotificationService {
   }
 }
 
-// ✅ --- THIS IS THE FIX ---
 // Export the class definition itself, not an instance of it.
-// This makes it "constructable" and allows `new NotificationService()` to work in other files.
 export default NotificationService
