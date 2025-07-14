@@ -1,28 +1,53 @@
 -- This script will drop existing tables and recreate them to ensure a clean state.
--- The order of dropping is important to respect foreign key constraints.
+-- ✅ CORRECTED ORDER: First drop tables that have foreign keys, then drop the tables they reference.
 DROP TABLE IF EXISTS user_tutorials;
 DROP TABLE IF EXISTS transactions;
 DROP TABLE IF EXISTS dates;
-DROP TABLE IF EXISTS attraction;
+DROP TABLE IF EXISTS attractions;
 DROP TABLE IF EXISTS calendar_day;
-DROP TABLE IF EXISTS users;
+DROP TABLE IF EXISTS notifications;
 DROP TABLE IF EXISTS advertisements;
 DROP TABLE IF EXISTS tutorials;
-DROP TABLE IF EXISTS notifications; -- ✅ Dropping the new table if it exists
+-- ✅ Drop the 'users' table LAST, because many other tables depend on it.
+DROP TABLE IF EXISTS users;
+
 -- Drop custom types if they exist
 DROP TYPE IF EXISTS status_type;
 DROP TYPE IF EXISTS transaction_type;
-DROP TYPE IF EXISTS notification_status; -- ✅ Dropping the new type if it exists
+DROP TYPE IF EXISTS notification_status;
 
 
 -- =================================================================
--- RECREATING TABLES WITH FIREBASE (FCM) INTEGRATION
+-- RECREATING TYPES AND TABLES
 -- =================================================================
 
--- ✅ --- MAIN CHANGE IS HERE ---
--- USERS Table (Updated for Firebase Cloud Messaging)
+-- Step 1: Create Custom Types first
+DO $$ BEGIN
+    IF NOT EXISTS (SELECT 1 FROM pg_type WHERE typname = 'status_type') THEN
+        CREATE TYPE status_type AS ENUM ('unscheduled', 'pending', 'approved', 'cancelled', 'completed');
+    END IF;
+END $$;
+
+DO $$ BEGIN
+    IF NOT EXISTS (SELECT 1 FROM pg_type WHERE typname = 'transaction_type') THEN
+        CREATE TYPE transaction_type AS ENUM (
+            'purchase', 'replenishment', 'admin', 'refund', 'deduction',
+            'bonus', 'penalty', 'gift', 'subscription', 'advertising'
+        );
+    END IF;
+END $$;
+
+DO $$ BEGIN
+    IF NOT EXISTS (SELECT 1 FROM pg_type WHERE typname = 'notification_status') THEN
+        CREATE TYPE notification_status AS ENUM ('read', 'unread');
+    END IF;
+END $$;
+
+
+-- Step 2: Create Tables that don't depend on others
+-- USERS Table (Created first)
 CREATE TABLE users (
-    user_id VARCHAR(255) PRIMARY KEY,                 -- Stores the Auth0/Google subject ID
+    user_id VARCHAR(255) PRIMARY KEY,
     first_name VARCHAR(255) DEFAULT '',
     last_name VARCHAR(255) DEFAULT '',
     profile_picture_url VARCHAR(1024) DEFAULT NULL,
@@ -35,98 +60,8 @@ CREATE TABLE users (
     is_profile_complete BOOLEAN DEFAULT FALSE NOT NULL,
     auth0_id VARCHAR(255) NULL,
     email VARCHAR(255) UNIQUE NOT NULL,
-    tokens INTEGER DEFAULT 100, -- Default tokens for new users
-    fcm_token VARCHAR(255) NULL -- Replaced one_signal_player_id with fcm_token
-);
-
-
-
--- CALENDAR_DAY Table (No changes needed here)
-CREATE TABLE calendar_day (
-    calendar_id SERIAL PRIMARY KEY,
-    user_id VARCHAR(255) NOT NULL,
-    date DATE NOT NULL,
-    user_video_url VARCHAR(1024) DEFAULT NULL,
-    vimeo_uri TEXT NULL,
-    processing_status TEXT DEFAULT 'pending',
-    updated_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP,
-    created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP,
-    FOREIGN KEY (user_id) REFERENCES users(user_id) ON DELETE CASCADE,
-    UNIQUE (user_id, date)
-);
-
-CREATE INDEX IF NOT EXISTS idx_calendar_day_vimeo_uri ON calendar_day (vimeo_uri);
-CREATE INDEX IF NOT EXISTS idx_calendar_day_user_date ON calendar_day (user_id, date);
-
--- ATTRACTION Table (No changes needed here)
-CREATE TABLE attraction (
-    attraction_id SERIAL PRIMARY KEY,
-    date DATE,
-    user_from VARCHAR(255),
-    user_to VARCHAR(255),
-    romantic_rating INT CHECK (romantic_rating BETWEEN 0 AND 3),
-    sexual_rating INT CHECK (sexual_rating BETWEEN 0 AND 3),
-    friendship_rating INT CHECK (friendship_rating BETWEEN 0 AND 3),
-    long_term_potential BOOLEAN,
-    intellectual BOOLEAN,
-    emotional BOOLEAN,
-    result BOOLEAN,
-    first_message_rights BOOLEAN,
-    created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP,
-    updated_at TIMESTAMP WITHOUT TIME ZONE,
-    FOREIGN KEY (user_from) REFERENCES users(user_id) ON DELETE CASCADE,
-    FOREIGN KEY (user_to) REFERENCES users(user_id) ON DELETE CASCADE,
-    UNIQUE(user_from, user_to, date)
-);
-
--- DATES Table (No changes needed here)
-DO $$ BEGIN
-    IF NOT EXISTS (SELECT 1 FROM pg_type WHERE typname = 'status_type') THEN
-        CREATE TYPE status_type AS ENUM ('unscheduled', 'pending', 'approved', 'cancelled', 'completed');
-    END IF;
-END $$;
-
-CREATE TABLE dates (
-    date_id SERIAL PRIMARY KEY,
-    date DATE NOT NULL,
-    time TIME WITH TIME ZONE,
-    user_from VARCHAR(255),
-    user_to VARCHAR(255),
-    location_metadata JSON,
-    status status_type NOT NULL DEFAULT 'pending',
-    user_from_approved BOOLEAN DEFAULT FALSE,
-    user_to_approved BOOLEAN DEFAULT FALSE,
-    created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP,
-    updated_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP,
-    FOREIGN KEY (user_from) REFERENCES users(user_id) ON DELETE CASCADE,
-    FOREIGN KEY (user_to) REFERENCES users(user_id) ON DELETE CASCADE,
-    UNIQUE(user_from, user_to, date)
-);
-
--- =================================================================
--- OTHER TABLES AND FUNCTIONS (Kept as they were)
--- =================================================================
-
-DO $$ BEGIN
-    IF NOT EXISTS (SELECT 1 FROM pg_type WHERE typname = 'transaction_type') THEN
-        CREATE TYPE transaction_type AS ENUM (
-            'purchase', 'replenishment', 'admin', 'refund', 'deduction',
-            'bonus', 'penalty', 'gift', 'subscription', 'advertising'
-        );
-    END IF;
-END $$;
-
-CREATE TABLE transactions (
-    transaction_id SERIAL PRIMARY KEY,
-    user_id VARCHAR(255) NOT NULL,
-    transaction_type transaction_type NOT NULL,
-    amount_usd DECIMAL(10, 2) DEFAULT 0.00,
-    token_amount INT DEFAULT 0,
-    description TEXT,
-    transaction_date TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP,
-    related_entity_id VARCHAR(255) NULL,
-    related_entity_type VARCHAR(50) NULL,
-    FOREIGN KEY (user_id) REFERENCES users(user_id) ON DELETE CASCADE
+    tokens INTEGER DEFAULT 100,
+    fcm_token VARCHAR(255) NULL
 );
 
 CREATE TABLE advertisements (
@@ -150,6 +85,91 @@ CREATE TABLE tutorials (
     updated_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP
 );
 
+
+-- Step 3: Create Tables that depend on USERS
+CREATE TABLE notifications (
+    notification_id SERIAL PRIMARY KEY,
+    user_id VARCHAR(255) NOT NULL,
+    message TEXT NOT NULL,
+    type VARCHAR(50) NOT NULL,
+    status notification_status NOT NULL DEFAULT 'unread',
+    related_entity_id VARCHAR(255) NULL,
+    created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP,
+    proposing_user_id VARCHAR(255),
+    notified_user_id VARCHAR(255),
+    FOREIGN KEY (user_id) REFERENCES users(user_id) ON DELETE CASCADE,
+    FOREIGN KEY (proposing_user_id) REFERENCES users(user_id) ON DELETE SET NULL,
+    FOREIGN KEY (notified_user_id) REFERENCES users(user_id) ON DELETE SET NULL
+);
+
+CREATE TABLE calendar_day (
+    calendar_id SERIAL PRIMARY KEY,
+    user_id VARCHAR(255) NOT NULL,
+    date DATE NOT NULL,
+    user_video_url VARCHAR(1024) DEFAULT NULL,
+    vimeo_uri TEXT NULL,
+    processing_status TEXT DEFAULT 'pending',
+    updated_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP,
+    created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP,
+    FOREIGN KEY (user_id) REFERENCES users(user_id) ON DELETE CASCADE,
+    UNIQUE (user_id, date)
+);
+
+CREATE INDEX IF NOT EXISTS idx_calendar_day_vimeo_uri ON calendar_day (vimeo_uri);
+CREATE INDEX IF NOT EXISTS idx_calendar_day_user_date ON calendar_day (user_id, date);
+
+-- ATTRACTIONS Table (RENAMED)
+CREATE TABLE attractions (
+    attraction_id SERIAL PRIMARY KEY,
+    date DATE,
+    user_from VARCHAR(255),
+    user_to VARCHAR(255),
+    romantic_rating INT CHECK (romantic_rating BETWEEN 0 AND 3),
+    sexual_rating INT CHECK (sexual_rating BETWEEN 0 AND 3),
+    friendship_rating INT CHECK (friendship_rating BETWEEN 0 AND 3),
+    long_term_potential BOOLEAN,
+    intellectual BOOLEAN,
+    emotional BOOLEAN,
+    result BOOLEAN,
+    first_message_rights BOOLEAN,
+    created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP,
+    updated_at TIMESTAMP WITHOUT TIME ZONE,
+    FOREIGN KEY (user_from) REFERENCES users(user_id) ON DELETE CASCADE,
+    FOREIGN KEY (user_to) REFERENCES users(user_id) ON DELETE CASCADE,
+    UNIQUE(user_from, user_to, date)
+);
+
+CREATE TABLE dates (
+    date_id SERIAL PRIMARY KEY,
+    date DATE NOT NULL,
+    time TIME WITH TIME ZONE,
+    user_from VARCHAR(255),
+    user_to VARCHAR(255),
+    location_metadata JSON,
+    status status_type NOT NULL DEFAULT 'pending',
+    user_from_approved BOOLEAN DEFAULT FALSE,
+    user_to_approved BOOLEAN DEFAULT FALSE,
+    created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP,
+    updated_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP,
+    FOREIGN KEY (user_from) REFERENCES users(user_id) ON DELETE CASCADE,
+    FOREIGN KEY (user_to) REFERENCES users(user_id) ON DELETE CASCADE,
+    UNIQUE(user_from, user_to, date)
+);
+
+CREATE TABLE transactions (
+    transaction_id SERIAL PRIMARY KEY,
+    user_id VARCHAR(255) NOT NULL,
+    transaction_type transaction_type NOT NULL,
+    amount_usd DECIMAL(10, 2) DEFAULT 0.00,
+    token_amount INT DEFAULT 0,
+    description TEXT,
+    transaction_date TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP,
+    related_entity_id VARCHAR(255) NULL,
+    related_entity_type VARCHAR(50) NULL,
+    FOREIGN KEY (user_id) REFERENCES users(user_id) ON DELETE CASCADE
+);
+
+-- Step 4: Create tables that depend on both USERS and TUTORIALS
 CREATE TABLE user_tutorials (
     user_tutorial_id SERIAL PRIMARY KEY,
     user_id VARCHAR(255),
@@ -160,6 +180,11 @@ CREATE TABLE user_tutorials (
     FOREIGN KEY (tutorial_id) REFERENCES tutorials(tutorial_id) ON DELETE CASCADE,
     UNIQUE (user_id, tutorial_id)
 );
+
+
+-- =================================================================
+-- FUNCTIONS AND TRIGGERS
+-- =================================================================
 
 CREATE OR REPLACE FUNCTION delete_user_cascade(p_user_id VARCHAR)
 RETURNS VOID AS $$
@@ -182,4 +207,4 @@ BEGIN
    END IF;
    RETURN NEW;
 END;
-$$ language 'plpgsql';
+$$ LANGUAGE 'plpgsql';
