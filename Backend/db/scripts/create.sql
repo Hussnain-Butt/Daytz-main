@@ -3,9 +3,9 @@
 DROP TABLE IF EXISTS user_tutorials;
 DROP TABLE IF EXISTS transactions;
 DROP TABLE IF EXISTS dates;
-DROP TABLE IF EXISTS attraction;
+DROP TABLE IF EXISTS attractions; -- ✅ RENAMED
 DROP TABLE IF EXISTS calendar_day;
-DROP TABLE IF EXISTS notifications; -- ✅ Dropping the new table first
+DROP TABLE IF EXISTS notifications;
 DROP TABLE IF EXISTS users;
 DROP TABLE IF EXISTS advertisements;
 DROP TABLE IF EXISTS tutorials;
@@ -13,14 +13,14 @@ DROP TABLE IF EXISTS tutorials;
 -- Drop custom types if they exist
 DROP TYPE IF EXISTS status_type;
 DROP TYPE IF EXISTS transaction_type;
-DROP TYPE IF EXISTS notification_status; -- ✅ Dropping the new type
+DROP TYPE IF EXISTS notification_status;
 
 
 -- =================================================================
 -- RECREATING TYPES AND TABLES
 -- =================================================================
 
--- ✅ Step 1: Create Custom Types first
+-- Step 1: Create Custom Types first
 DO $$ BEGIN
     IF NOT EXISTS (SELECT 1 FROM pg_type WHERE typname = 'status_type') THEN
         CREATE TYPE status_type AS ENUM ('unscheduled', 'pending', 'approved', 'cancelled', 'completed');
@@ -43,7 +43,7 @@ DO $$ BEGIN
 END $$;
 
 
--- ✅ Step 2: Create Tables that don't depend on others
+-- Step 2: Create Tables that don't depend on others
 -- USERS Table (Updated for Firebase Cloud Messaging)
 CREATE TABLE users (
     user_id VARCHAR(255) PRIMARY KEY,                 -- Stores the Auth0/Google subject ID
@@ -85,7 +85,7 @@ CREATE TABLE tutorials (
 );
 
 
--- ✅ Step 3: Create Tables that depend on USERS
+-- Step 3: Create Tables that depend on USERS
 -- NOTIFICATIONS Table (New)
 CREATE TABLE notifications (
     notification_id SERIAL PRIMARY KEY,
@@ -120,8 +120,9 @@ CREATE TABLE calendar_day (
 CREATE INDEX IF NOT EXISTS idx_calendar_day_vimeo_uri ON calendar_day (vimeo_uri);
 CREATE INDEX IF NOT EXISTS idx_calendar_day_user_date ON calendar_day (user_id, date);
 
--- ATTRACTION Table
-CREATE TABLE attraction (
+-- ✅ --- MAIN CHANGE IS HERE --- ✅
+-- ATTRACTIONS Table (RENAMED)
+CREATE TABLE attractions (
     attraction_id SERIAL PRIMARY KEY,
     date DATE,
     user_from VARCHAR(255),
@@ -173,7 +174,7 @@ CREATE TABLE transactions (
     FOREIGN KEY (user_id) REFERENCES users(user_id) ON DELETE CASCADE
 );
 
--- ✅ Step 4: Create tables that depend on both USERS and TUTORIALS
+-- Step 4: Create tables that depend on both USERS and TUTORIALS
 -- USER_TUTORIALS Table
 CREATE TABLE user_tutorials (
     user_tutorial_id SERIAL PRIMARY KEY,
