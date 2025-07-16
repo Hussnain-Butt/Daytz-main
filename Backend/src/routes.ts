@@ -59,6 +59,12 @@ router.patch(
   ...protectedRouteMiddleware,
   asyncHandler(dateHandlers.updateDateHandler),
 )
+// ✅ ================== NAYA ROUTE ==================
+router.patch(
+  '/dates/:dateId/feedback',
+  ...protectedRouteMiddleware,
+  asyncHandler(dateHandlers.addDateFeedbackHandler),
+)
 router.patch(
   '/dates/:dateId/cancel',
   ...protectedRouteMiddleware,
@@ -69,7 +75,6 @@ router.get(
   ...protectedReadMiddleware,
   asyncHandler(dateHandlers.getDateByIdHandler),
 )
-// ✅ NEW ROUTE for getting the upcoming dates list
 router.get(
   '/dates/me/upcoming',
   ...protectedReadMiddleware,
@@ -93,12 +98,6 @@ router.post(
   asyncHandler(notificationHandler.markNotificationsAsReadHandler),
 )
 
-// ✅ NEW ROUTE for getting the upcoming dates list
-router.get(
-  '/dates/me/upcoming',
-  ...protectedReadMiddleware,
-  asyncHandler(dateHandlers.getUpcomingDatesHandler),
-)
 // ... (Other routes like ATTRACTION, TRANSACTION, etc. remain the same)
 router.get(
   '/transactions/me',

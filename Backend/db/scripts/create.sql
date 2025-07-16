@@ -1,5 +1,6 @@
 -- This script will drop existing tables and recreate them to ensure a clean state.
 -- ✅ CORRECTED ORDER: First drop tables that have foreign keys, then drop the tables they reference.
+DROP TABLE IF EXISTS date_feedback; -- ✅ Added new table to drop list
 DROP TABLE IF EXISTS user_tutorials;
 DROP TABLE IF EXISTS transactions;
 DROP TABLE IF EXISTS dates;
@@ -15,6 +16,7 @@ DROP TABLE IF EXISTS users;
 DROP TYPE IF EXISTS status_type;
 DROP TYPE IF EXISTS transaction_type;
 DROP TYPE IF EXISTS notification_status;
+DROP TYPE IF EXISTS date_outcome_type; -- ✅ Added new type to drop list
 
 
 -- =================================================================
@@ -24,7 +26,7 @@ DROP TYPE IF EXISTS notification_status;
 -- Step 1: Create Custom Types first
 DO $$ BEGIN
     IF NOT EXISTS (SELECT 1 FROM pg_type WHERE typname = 'status_type') THEN
-        CREATE TYPE status_type AS ENUM ('unscheduled', 'pending', 'approved', 'cancelled', 'completed');
+        CREATE TYPE status_type AS ENUM ('unscheduled', 'pending', 'approved', 'declined', 'cancelled', 'completed');
     END IF;
 END $$;
 
@@ -40,6 +42,13 @@ END $$;
 DO $$ BEGIN
     IF NOT EXISTS (SELECT 1 FROM pg_type WHERE typname = 'notification_status') THEN
         CREATE TYPE notification_status AS ENUM ('read', 'unread');
+    END IF;
+END $$;
+
+-- ✅ Added the new ENUM type for date feedback
+DO $$ BEGIN
+    IF NOT EXISTS (SELECT 1 FROM pg_type WHERE typname = 'date_outcome_type') THEN
+        CREATE TYPE date_outcome_type AS ENUM ('amazing', 'stood_up', 'cancelled', 'other');
     END IF;
 END $$;
 
@@ -139,6 +148,7 @@ CREATE TABLE attractions (
     UNIQUE(user_from, user_to, date)
 );
 
+-- ✅ 'dates' table is now clean, without outcome/notes columns.
 CREATE TABLE dates (
     date_id SERIAL PRIMARY KEY,
     date DATE NOT NULL,
@@ -179,6 +189,30 @@ CREATE TABLE user_tutorials (
     FOREIGN KEY (user_id) REFERENCES users(user_id) ON DELETE CASCADE,
     FOREIGN KEY (tutorial_id) REFERENCES tutorials(tutorial_id) ON DELETE CASCADE,
     UNIQUE (user_id, tutorial_id)
+);
+
+-- ✅ =================================================================
+-- ✅ NEW TABLE FOR INDIVIDUAL DATE FEEDBACK
+-- ✅ =================================================================
+CREATE TABLE date_feedback (
+    feedback_id SERIAL PRIMARY KEY,
+    date_id INT NOT NULL,
+    user_id VARCHAR(255) NOT NULL,
+    outcome date_outcome_type NOT NULL,
+    notes TEXT,
+    created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP,
+    
+    CONSTRAINT fk_date
+        FOREIGN KEY(date_id) 
+        REFERENCES dates(date_id)
+        ON DELETE CASCADE,
+        
+    CONSTRAINT fk_user
+        FOREIGN KEY(user_id)
+        REFERENCES users(user_id)
+        ON DELETE CASCADE,
+
+    CONSTRAINT unique_date_user UNIQUE (date_id, user_id)
 );
 
 

@@ -6,7 +6,13 @@ import { Platform } from 'react-native';
 
 import { User, CreateUserApiPayload as ActualCreateUserPayloadType } from '../types/User';
 import { CalendarDay, StoryQueryResult as BackendStoryItem } from '../types/CalendarDay';
-import { DateObject, CreateDatePayload, DetailedDateObject, UpcomingDate } from '../types/Date';
+import {
+  DateObject,
+  CreateDatePayload,
+  DetailedDateObject,
+  UpcomingDate,
+  DateOutcome,
+} from '../types/Date';
 import { Transaction as BackendTransactionType } from '../types/Transaction';
 import { Notification, UnreadCountResponse } from '../types/Notification';
 import {
@@ -79,6 +85,18 @@ const handleApiError = (error: unknown, context: string): void => {
   throw newError;
 };
 
+// ✅ ================== NAYI API FUNCTION ==================
+export const addDateFeedback = async (
+  dateId: number,
+  payload: { outcome: DateOutcome; notes?: string }
+): Promise<AxiosResponse<DateObject>> => {
+  try {
+    return await apiClient.patch<DateObject>(`/dates/${dateId}/feedback`, payload);
+  } catch (e) {
+    handleApiError(e, `addDateFeedback (ID: ${dateId})`);
+    throw e;
+  }
+};
 // --- USER API ---
 export const createUser = async (
   userData: ActualCreateUserPayloadType
@@ -217,14 +235,31 @@ export const getDateById = async (
     throw e;
   }
 };
+// ✅ MODIFIED: This function is now more generic for updates and rescheduling.
 export const updateDate = async (
   dateId: string,
-  payload: Partial<{ status: 'approved' | 'declined' | 'cancelled' }>
+  payload: Partial<{
+    status: 'approved' | 'declined';
+    date: string;
+    time: string;
+    locationMetadata: any;
+  }>
 ): Promise<AxiosResponse<DateObject>> => {
   try {
     return await apiClient.patch<DateObject>(`/dates/${dateId}`, payload);
   } catch (e) {
     handleApiError(e, `updateDate (ID: ${dateId})`);
+    throw e;
+  }
+};
+
+// ✅ NEW: Function to cancel a date.
+export const cancelDate = async (dateId: string): Promise<AxiosResponse<DateObject>> => {
+  try {
+    // The endpoint is .../cancel, so we don't need a payload.
+    return await apiClient.patch<DateObject>(`/dates/${dateId}/cancel`, {});
+  } catch (e) {
+    handleApiError(e, `cancelDate (ID: ${dateId})`);
     throw e;
   }
 };

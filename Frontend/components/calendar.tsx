@@ -1,90 +1,86 @@
-// --- COMPLETE FINAL UPDATED CODE: components/calendar.tsx ---
-
 import React, { useState, useEffect, useCallback } from 'react';
-import { View, StyleSheet, Text, TouchableOpacity, ActivityIndicator, Alert } from 'react-native';
+import { View, StyleSheet, Text, TouchableOpacity, Alert } from 'react-native';
 import { Calendar, DateData } from 'react-native-calendars';
-import { useRouter, useFocusEffect } from 'expo-router';
-// Import the simplified API function
-import { getCalendarDaysByUserId } from '../api/api';
-import { format } from 'date-fns';
+import { useRouter } from 'expo-router';
+import { format, startOfMonth, parse, isBefore, startOfToday } from 'date-fns';
 import { CalendarDay } from '../types/CalendarDay';
-import { User as Auth0User } from 'react-native-auth0'; // Import Auth0 user type
+import { User as Auth0User } from 'react-native-auth0';
 import { colors } from '../utils/theme';
 
-interface MarkedDateInfo {
-  marked?: boolean;
+// Interface for custom marking
+interface CustomMarking {
+  customStyles?: {
+    container?: object;
+    text?: object;
+  };
   dotColor?: string;
+  marked?: boolean;
+  disabled?: boolean;
+  disableTouchEvent?: boolean;
 }
+
 interface MarkedDates {
-  [date: string]: MarkedDateInfo;
+  [date: string]: CustomMarking;
 }
 
 interface VideoCalendarProps {
-  // The component now only needs the user object
   user: (Auth0User & { sub?: string }) | null;
+  calendarData: CalendarDay[];
 }
 
-const VideoCalendar: React.FC<VideoCalendarProps> = ({ user }) => {
+const VideoCalendar: React.FC<VideoCalendarProps> = ({ user, calendarData }) => {
   const router = useRouter();
   const [markedDates, setMarkedDates] = useState<MarkedDates>({});
-  const [isLoading, setIsLoading] = useState(false);
-  const [error, setError] = useState<string | null>(null);
+  const [currentMonth, setCurrentMonth] = useState(format(new Date(), 'yyyy-MM-dd'));
 
-  const fetchUserData = useCallback(async () => {
-    // Check if the user object (and their sub ID) is available
-    if (!user?.sub) {
-      console.log('VideoCalendar: User.sub is not available. Aborting fetch.');
-      setMarkedDates({});
-      setIsLoading(false);
-      setError(null);
+  useEffect(() => {
+    const today = startOfToday();
+    const newMarkedDates: MarkedDates = {};
+
+    // 1. Mark dates with uploaded videos
+    calendarData.forEach((entry) => {
+      if (entry.date && entry.userVideoUrl) {
+        const dateStr = format(new Date(entry.date), 'yyyy-MM-dd');
+        newMarkedDates[dateStr] = {
+          marked: true,
+          dotColor: colors.GoldPrimary || 'blue',
+        };
+      }
+    });
+
+    // 2. Mark past dates as disabled with a strikethrough effect
+    const monthStartDate = startOfMonth(parse(currentMonth, 'yyyy-MM-dd', new Date()));
+    const daysInMonth = 31; // Check up to 31 days to cover all months
+    for (let i = 0; i < daysInMonth; i++) {
+      const day = new Date(monthStartDate.getFullYear(), monthStartDate.getMonth(), i + 1);
+
+      if (day.getMonth() !== monthStartDate.getMonth()) break;
+
+      const dateStr = format(day, 'yyyy-MM-dd');
+
+      if (isBefore(day, today) && !newMarkedDates[dateStr]) {
+        newMarkedDates[dateStr] = {
+          disabled: true,
+          disableTouchEvent: true,
+          customStyles: {
+            text: {
+              color: '#707070',
+              textDecorationLine: 'line-through',
+            },
+          },
+        };
+      }
+    }
+
+    setMarkedDates(newMarkedDates);
+  }, [calendarData, currentMonth]);
+
+  const handleDayPress = (day: DateData) => {
+    // This check is important because custom marking allows pressing disabled dates
+    if (markedDates[day.dateString]?.disabled) {
       return;
     }
 
-    setIsLoading(true);
-    setError(null);
-    console.log(`VideoCalendar: Fetching calendar data for Auth0 user: ${user.sub}`);
-
-    try {
-      // API Call Simplified: No getAccessToken needed.
-      // The backend extracts the user ID from the token that the interceptor adds.
-      const response = await getCalendarDaysByUserId();
-
-      const newMarkedDates: MarkedDates = {};
-      if (response.data && Array.isArray(response.data)) {
-        console.log(`VideoCalendar: Received ${response.data.length} calendar entries.`);
-        response.data.forEach((entry: CalendarDay) => {
-          if (entry.date && entry.userVideoUrl) {
-            const dateStr = format(new Date(entry.date), 'yyyy-MM-dd');
-            newMarkedDates[dateStr] = {
-              marked: true,
-              dotColor: colors.GoldPrimary || 'blue',
-            };
-          }
-        });
-      } else {
-        console.warn('VideoCalendar: No valid calendar data received. Response data:', response.data);
-      }
-      setMarkedDates(newMarkedDates);
-    } catch (err: any) {
-      console.error('VideoCalendar: Error fetching user calendar data:', err.message, err);
-      setError(err.message || 'Could not load your calendar data.');
-      setMarkedDates({});
-    } finally {
-      setIsLoading(false);
-    }
-  }, [user?.sub]); // Dependency is now just the user's ID
-
-  useFocusEffect(
-    useCallback(() => {
-      console.log('VideoCalendar: Screen focused, initiating data fetch...');
-      fetchUserData();
-      return () => {
-        console.log('VideoCalendar: Screen unfocused.');
-      };
-    }, [fetchUserData])
-  );
-
-  const handleDayPress = (day: DateData) => {
     const dateString = day.dateString;
     console.log(`VideoCalendar: Day pressed: ${dateString}`);
 
@@ -105,24 +101,12 @@ const VideoCalendar: React.FC<VideoCalendarProps> = ({ user }) => {
 
   return (
     <View style={styles.calendarWrapper}>
-      {isLoading && (
-        <View style={styles.statusContainer}>
-          <ActivityIndicator size="small" color={colors.GoldPrimary || '#FFD700'} />
-          <Text style={styles.statusText}>Loading Calendar...</Text>
-        </View>
-      )}
-      {!isLoading && error && (
-        <View style={styles.statusContainer}>
-          <Text style={[styles.statusText, styles.errorText]}>Error: {error}</Text>
-          <TouchableOpacity onPress={fetchUserData} style={styles.retryButton}>
-            <Text style={styles.retryButtonText}>Try Again</Text>
-          </TouchableOpacity>
-        </View>
-      )}
-
       <Calendar
+        onMonthChange={(month) => {
+          setCurrentMonth(month.dateString);
+        }}
         onDayPress={handleDayPress}
-        markingType={'dot'}
+        markingType={'custom'}
         markedDates={markedDates}
         style={styles.calendar}
         theme={{
@@ -131,9 +115,9 @@ const VideoCalendar: React.FC<VideoCalendarProps> = ({ user }) => {
           textSectionTitleColor: colors.LightGrey || '#b6c1cd',
           selectedDayBackgroundColor: colors.GoldPrimary || '#FFDB5C',
           selectedDayTextColor: colors.Black || '#000000',
-          todayTextColor: colors.White || '#E0E0E0',
+          // ✅ CHANGE: Today's date color changed to white
+          todayTextColor: colors.White || '#FFFFFF',
           dayTextColor: colors.White || '#E0E0E0',
-          textDisabledColor: colors.GreyDark || '#555555',
           dotColor: colors.GoldPrimary || 'blue',
           selectedDotColor: colors.White || '#ffffff',
           arrowColor: colors.GoldPrimary || '#FFDB5C',
@@ -180,33 +164,7 @@ const VideoCalendar: React.FC<VideoCalendarProps> = ({ user }) => {
 const styles = StyleSheet.create({
   calendarWrapper: {
     width: '100%',
-    flex: 1,
     backgroundColor: colors.Background || '#1F1F1F',
-  },
-  statusContainer: {
-    paddingVertical: 10,
-    alignItems: 'center',
-  },
-  statusText: {
-    color: colors.LightGrey || '#CCCCCC',
-    textAlign: 'center',
-    marginBottom: 5,
-    fontSize: 14,
-  },
-  errorText: {
-    color: colors.PinkPrimary || 'red',
-    fontWeight: 'bold',
-  },
-  retryButton: {
-    marginTop: 10,
-    paddingVertical: 6,
-    paddingHorizontal: 12,
-    backgroundColor: colors.GoldPrimary || '#FFD700',
-    borderRadius: 15,
-  },
-  retryButtonText: {
-    color: colors.Black || '#000000',
-    fontWeight: 'bold',
   },
   calendar: {
     borderRadius: 8,

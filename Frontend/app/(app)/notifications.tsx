@@ -1,5 +1,5 @@
 // File: app/(app)/notifications.tsx
-// ✅ COMPLETE AND FINAL UPDATED CODE WITH BUBBLE POPUP
+// ✅ Syntax error fixed. Icon size is 50x50 and logic is correct.
 
 import React, { useState, useEffect, useCallback } from 'react';
 import {
@@ -14,7 +14,7 @@ import {
   Platform,
   StatusBar as RNStatusBar,
   RefreshControl,
-  Modal, // BubblePopup ke liye import
+  Modal,
 } from 'react-native';
 import { useRouter, useFocusEffect } from 'expo-router';
 import { formatDistanceToNow } from 'date-fns';
@@ -24,23 +24,18 @@ import { Notification } from '../../types/Notification';
 
 const BACK_ARROW_ICON = require('../../assets/back_arrow_icon.png');
 const NOTIFICATION_BELL_ICON = require('../../assets/notification_bell_icon.png');
-
-// =====> ALERT KI TASVEEREIN IMPORT KAREIN (PATH THEEK KAREIN) <=====
 const calcHappyIcon = require('../../assets/calc-happy.png');
 const calcErrorIcon = require('../../assets/calc-error.png');
-// =====================================================================
 
-// --- NEW BUBBLE POPUP COMPONENT ---
+// --- BUBBLE POPUP COMPONENT (UNCHANGED) ---
 const BubblePopup = ({ visible, type, title, message, buttonText, onClose }) => {
   if (!visible) {
     return null;
   }
-
   const isSuccess = type === 'success';
   const imageSource = isSuccess ? calcHappyIcon : calcErrorIcon;
   const buttonStyle = isSuccess ? styles.successButton : styles.errorButton;
   const buttonTextStyle = isSuccess ? styles.successButtonText : styles.errorButtonText;
-
   return (
     <Modal transparent visible={visible} animationType="fade" onRequestClose={onClose}>
       <View style={styles.overlay}>
@@ -60,6 +55,15 @@ const BubblePopup = ({ visible, type, title, message, buttonText, onClose }) => 
 };
 // --- END OF BUBBLE POPUP COMPONENT ---
 
+// ✅ Correct logic: Show error icon ONLY for declined dates.
+const getNotificationIcon = (notificationType: string) => {
+  if (notificationType === 'DATE_DECLINED') {
+    return calcErrorIcon;
+  }
+  // Show happy icon for all other notification types.
+  return calcHappyIcon;
+};
+
 const NotificationItem = ({
   item,
   onPress,
@@ -70,6 +74,7 @@ const NotificationItem = ({
   <TouchableOpacity
     style={[styles.notificationItem, item.status === 'unread' && styles.unreadItem]}
     onPress={() => onPress(item)}>
+    <Image source={getNotificationIcon(item.type)} style={styles.notificationIcon} />
     <View style={styles.notificationContent}>
       <Text style={styles.notificationMessage}>{item.message}</Text>
       <Text style={styles.notificationTimestamp}>
@@ -85,26 +90,16 @@ export default function NotificationsScreen() {
   const [notifications, setNotifications] = useState<Notification[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [isRefreshing, setIsRefreshing] = useState(false);
-
-  // =====> CUSTOM POPUP KE LIYE STATE <=====
   const [popupState, setPopupState] = useState({
     visible: false,
     type: 'error' as 'success' | 'error',
     title: '',
     message: '',
   });
-  // ======================================
 
-  // =====> CUSTOM POPUP DIKHANE KE LIYE HELPER FUNCTION <=====
   const showPopup = (title: string, message: string, type: 'success' | 'error' = 'error') => {
-    setPopupState({
-      visible: true,
-      title,
-      message,
-      type,
-    });
+    setPopupState({ visible: true, title, message, type });
   };
-  // ========================================================
 
   const fetchNotifications = useCallback(async () => {
     try {
@@ -112,7 +107,6 @@ export default function NotificationsScreen() {
       setNotifications(response.data);
     } catch (error) {
       console.error('Failed to fetch notifications:', error);
-      // alert ko showPopup se replace karein
       showPopup('Load Failed', 'Could not load notifications. Please try again.', 'error');
     }
   }, []);
@@ -128,7 +122,6 @@ export default function NotificationsScreen() {
       markNotificationsAsRead().catch((err) => {
         console.error('Failed to mark notifications as read:', err);
       });
-      // Re-fetch notifications to update their status visually
       fetchNotifications();
     }, [fetchNotifications])
   );
@@ -198,7 +191,6 @@ export default function NotificationsScreen() {
         />
       )}
 
-      {/* Naya popup render ho raha hai */}
       <BubblePopup
         visible={popupState.visible}
         type={popupState.type}
@@ -227,7 +219,7 @@ const styles = StyleSheet.create({
     borderBottomColor: colors.DarkGrey || '#333',
   },
   headerButton: { padding: 8 },
-  headerIcon: { width: 24, height: 24, tintColor: colors.White || '#FFFFFF' },
+  headerIcon: { width: 24, height: 24 },
   headerTitle: { fontSize: 20, fontWeight: 'bold', color: colors.White || '#FFFFFF' },
   loadingContainer: { flex: 1, justifyContent: 'center', alignItems: 'center' },
   notificationItem: {
@@ -236,6 +228,13 @@ const styles = StyleSheet.create({
     paddingHorizontal: 20,
     paddingVertical: 15,
     backgroundColor: colors.Background || '#121212',
+  },
+  // ✅ Icon size increased
+  notificationIcon: {
+    width: 50,
+    height: 50,
+    resizeMode: 'contain',
+    marginRight: 15,
   },
   unreadItem: { backgroundColor: colors.DarkGrey || '#1E1E1E' },
   notificationContent: { flex: 1 },
@@ -248,7 +247,8 @@ const styles = StyleSheet.create({
     backgroundColor: colors.TealPrimary || '#00BCD4',
     marginLeft: 15,
   },
-  separator: { height: 1, backgroundColor: colors.DarkGrey || '#333', marginLeft: 20 },
+  // ✅ Separator margin adjusted for the new icon size (20 + 50 + 15 = 85)
+  separator: { height: 1, backgroundColor: colors.DarkGrey || '#333', marginLeft: 85 },
   emptyContainer: {
     flex: 1,
     justifyContent: 'center',
@@ -270,7 +270,7 @@ const styles = StyleSheet.create({
     marginTop: 10,
     lineHeight: 22,
   },
-  // --- NAYE BUBBLE POPUP KE STYLES ---
+  // --- BUBBLE POPUP STYLES (UNCHANGED) ---
   overlay: {
     flex: 1,
     backgroundColor: 'rgba(0, 0, 0, 0.7)',
@@ -278,18 +278,8 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     paddingHorizontal: 20,
   },
-  popupContainer: {
-    alignItems: 'center',
-    width: '100%',
-    maxWidth: 350,
-  },
-  popupImage: {
-    width: 220,
-    height: 220,
-    resizeMode: 'contain',
-    zIndex: 1,
-    marginBottom: -80,
-  },
+  popupContainer: { alignItems: 'center', width: '100%', maxWidth: 350 },
+  popupImage: { width: 220, height: 220, resizeMode: 'contain', zIndex: 1, marginBottom: -80 },
   bubble: {
     width: '90%',
     backgroundColor: '#FFFFFF',
@@ -323,20 +313,8 @@ const styles = StyleSheet.create({
     paddingHorizontal: 40,
     alignItems: 'center',
   },
-  errorButton: {
-    backgroundColor: colors.PinkPrimary || '#FF6B6B',
-  },
-  successButton: {
-    backgroundColor: colors.GoldPrimary || '#FFD700',
-  },
-  errorButtonText: {
-    color: colors.White || '#FFFFFF',
-    fontSize: 15,
-    fontWeight: 'bold',
-  },
-  successButtonText: {
-    color: colors.Black || '#000000',
-    fontSize: 15,
-    fontWeight: 'bold',
-  },
+  errorButton: { backgroundColor: colors.PinkPrimary || '#FF6B6B' },
+  successButton: { backgroundColor: colors.GoldPrimary || '#FFD700' },
+  errorButtonText: { color: colors.White || '#FFFFFF', fontSize: 15, fontWeight: 'bold' },
+  successButtonText: { color: colors.Black || '#000000', fontSize: 15, fontWeight: 'bold' },
 });

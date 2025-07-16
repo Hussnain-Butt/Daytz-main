@@ -1,10 +1,9 @@
 // File: types/Date.ts (Frontend)
 // ✅ COMPLETE AND FINAL CORRECTED CODE
 
-// ✅ 'declined' ko yahan bhi add kiya gaya hai taake dono files same rahen
+export type DateOutcome = 'amazing' | 'stood_up' | 'cancelled' | 'other';
 export type DateStatus = 'pending' | 'approved' | 'declined' | 'cancelled' | 'completed';
 
-// Represents a detailed Date object with nested user info
 export interface DetailedDateObject {
   dateId: number;
   date: string;
@@ -26,27 +25,26 @@ export interface DetailedDateObject {
   updatedAt?: string;
 }
 
-// Represents a single item in the "Upcoming Dates" list
 export interface UpcomingDate {
   dateId: number;
   date: string;
   time: string | null;
+  updatedAt?: string; // ✅ YEH FIELD ADD KI GAYI HAI
   locationMetadata: { name: string };
   otherUser: {
     userId: string;
     firstName: string;
     profilePictureUrl: string | null;
   };
-  // Needed for frontend logic
   userFrom: string;
   userTo: string;
-  // Populated on the frontend
   romanticRating: number;
   sexualRating: number;
   friendshipRating: number;
+  myOutcome: DateOutcome | null;
+  myNotes: string | null;
 }
 
-// Represents a basic Date object
 export interface DateObject {
   dateId: number;
   date: string;
@@ -61,7 +59,6 @@ export interface DateObject {
   updatedAt?: string;
 }
 
-// Payload for creating a new date proposal
 export interface CreateDatePayload {
   date: string;
   time: string | null;

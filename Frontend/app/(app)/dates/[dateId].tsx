@@ -1,5 +1,5 @@
 // File: app/(app)/dates/[dateId].tsx
-// ✅ COMPLETE AND FINAL UPDATED CODE WITH BUBBLE POPUP
+// ✅ COMPLETE AND FINAL UPDATED CODE (WITH CORRECT PROFILE DISPLAY LOGIC)
 
 import React, { useState, useEffect, useCallback, useRef } from 'react';
 import {
@@ -12,15 +12,19 @@ import {
   Platform,
   ScrollView,
   Text,
-  Modal, // BubblePopup ke liye import
+  Modal,
+  Alert,
+  TextInput,
+  KeyboardAvoidingView,
 } from 'react-native';
 import { Avatar } from 'react-native-paper';
-import { format, parseISO } from 'date-fns';
+import { format, parseISO, isValid } from 'date-fns';
 import { useRouter, useLocalSearchParams } from 'expo-router';
 import { useAuth } from '../../../contexts/AuthContext';
 import {
   getDateById,
   updateDate,
+  cancelDate,
   getPlayableVideoUrl,
   isAuthTokenApiError,
 } from '../../../api/api';
@@ -28,14 +32,13 @@ import { DetailedDateObject } from '../../../types/Date';
 import { Video, ResizeMode } from 'expo-av';
 import { Ionicons } from '@expo/vector-icons';
 
+// Assets
 const BACK_ARROW_ICON = require('../../../assets/back_arrow_icon.png');
 const BRAND_LOGO = require('../../../assets/brand.png');
-
-// =====> ALERT KI TASVEEREIN IMPORT KAREIN (PATH THEEK KAREIN) <=====
 const calcHappyIcon = require('../../../assets/calc-happy.png');
 const calcErrorIcon = require('../../../assets/calc-error.png');
-// =====================================================================
 
+// Styles
 const screenColors = {
   background: '#121212',
   textPrimary: '#FFFFFF',
@@ -43,26 +46,24 @@ const screenColors = {
   cardBackground: '#1C1C1E',
   acceptButton: '#28a745',
   declineButton: '#dc3545',
+  rescheduleButton: '#007bff',
+  cancelModalButton: '#d9534f',
+  submitModalButton: '#007bff',
   buttonText: '#FFFFFF',
   avatarBorder: '#A020F0',
-  // Bubble Popup ke liye colors
   PinkPrimary: '#FF6B6B',
   GoldPrimary: '#FFD700',
   Black: '#000000',
   White: '#FFFFFF',
 };
 
-// --- NEW BUBBLE POPUP COMPONENT ---
+// Reusable Bubble Popup Component
 const BubblePopup = ({ visible, type, title, message, buttonText, onClose }) => {
-  if (!visible) {
-    return null;
-  }
-
+  if (!visible) return null;
   const isSuccess = type === 'success';
   const imageSource = isSuccess ? calcHappyIcon : calcErrorIcon;
   const buttonStyle = isSuccess ? styles.successButton : styles.errorButton;
   const buttonTextStyle = isSuccess ? styles.successButtonText : styles.errorButtonText;
-
   return (
     <Modal transparent visible={visible} animationType="fade" onRequestClose={onClose}>
       <View style={styles.overlay}>
@@ -80,7 +81,88 @@ const BubblePopup = ({ visible, type, title, message, buttonText, onClose }) => 
     </Modal>
   );
 };
-// --- END OF BUBBLE POPUP COMPONENT ---
+
+// Reschedule Modal Component
+const RescheduleModal = ({ visible, onClose, onSubmit, currentDateDetails }) => {
+  const [newDate, setNewDate] = useState(
+    currentDateDetails.date && isValid(parseISO(currentDateDetails.date))
+      ? format(parseISO(currentDateDetails.date), 'yyyy-MM-dd')
+      : ''
+  );
+  const [newTime, setNewTime] = useState(
+    currentDateDetails.time
+      ? format(parseISO(`1970-01-01T${currentDateDetails.time}`), 'HH:mm')
+      : ''
+  );
+  const [newVenue, setNewVenue] = useState(currentDateDetails.locationMetadata?.name || '');
+
+  const handleReschedule = () => {
+    if (!newDate.match(/^\d{4}-\d{2}-\d{2}$/)) {
+      Alert.alert('Invalid Format', 'Please enter the date in YYYY-MM-DD format.');
+      return;
+    }
+    if (!newTime.match(/^\d{2}:\d{2}$/)) {
+      Alert.alert('Invalid Format', 'Please enter the time in HH:mm format.');
+      return;
+    }
+    if (!newVenue.trim()) {
+      Alert.alert('Venue Required', 'Please enter a venue for the date.');
+      return;
+    }
+    onSubmit({
+      date: newDate,
+      time: `${newTime}:00`,
+      locationMetadata: { name: newVenue },
+    });
+  };
+
+  return (
+    <Modal transparent visible={visible} animationType="slide" onRequestClose={onClose}>
+      <KeyboardAvoidingView
+        behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
+        style={styles.modalOverlay}>
+        <View style={styles.modalContent}>
+          <Text style={styles.modalTitle}>Reschedule Date</Text>
+          <TextInput
+            style={styles.modalInput}
+            placeholder="Date (YYYY-MM-DD)"
+            value={newDate}
+            onChangeText={setNewDate}
+            placeholderTextColor="#888"
+            keyboardType="numeric"
+          />
+          <TextInput
+            style={styles.modalInput}
+            placeholder="Time (HH:mm)"
+            value={newTime}
+            onChangeText={setNewTime}
+            placeholderTextColor="#888"
+            keyboardType="numeric"
+          />
+          <TextInput
+            style={styles.modalInput}
+            placeholder="Venue"
+            value={newVenue}
+            onChangeText={setNewVenue}
+            placeholderTextColor="#888"
+          />
+          <View style={styles.modalButtonContainer}>
+            <TouchableOpacity
+              style={[styles.modalButton, styles.cancelModalButton]}
+              onPress={onClose}>
+              <Text style={styles.actionButtonText}>Cancel</Text>
+            </TouchableOpacity>
+            <TouchableOpacity
+              style={[styles.modalButton, styles.submitModalButton]}
+              onPress={handleReschedule}>
+              <Text style={styles.actionButtonText}>Submit</Text>
+            </TouchableOpacity>
+          </View>
+        </View>
+      </KeyboardAvoidingView>
+    </Modal>
+  );
+};
 
 const DateDetailScreen = () => {
   const router = useRouter();
@@ -93,33 +175,18 @@ const DateDetailScreen = () => {
   const [isSubmitting, setIsSubmitting] = useState(false);
   const videoRef = useRef<Video>(null);
   const [videoStatus, setVideoStatus] = useState<any>({});
-
-  // =====> CUSTOM POPUP KE LIYE STATE <=====
   const [popupState, setPopupState] = useState({
     visible: false,
-    type: 'error' as 'success' | 'error',
+    type: 'error',
     title: '',
     message: '',
-    onCloseCallback: undefined as (() => void) | undefined,
+    onCloseCallback: undefined,
   });
-  // ======================================
+  const [isRescheduleModalVisible, setRescheduleModalVisible] = useState(false);
 
-  // =====> CUSTOM POPUP DIKHANE KE LIYE HELPER FUNCTION <=====
-  const showPopup = (
-    title: string,
-    message: string,
-    type: 'success' | 'error' = 'error',
-    onCloseCallback?: () => void
-  ) => {
-    setPopupState({
-      visible: true,
-      title,
-      message,
-      type,
-      onCloseCallback,
-    });
+  const showPopup = (title, message, type = 'error', onCloseCallback = undefined) => {
+    setPopupState({ visible: true, title, message, type, onCloseCallback });
   };
-  // ========================================================
 
   const fetchDateDetails = useCallback(async () => {
     if (!dateId) return;
@@ -134,46 +201,80 @@ const DateDetailScreen = () => {
         setPlayableVideoUrl(videoResponse.data.playableUrl);
       }
     } catch (error) {
-      console.error('[DateDetailScreen] Error fetching date details:', error);
       showPopup('Error', 'Failed to load date details.', 'error', () => router.back());
-      if (isAuthTokenApiError(error)) logout && logout();
+      if (isAuthTokenApiError(error)) logout?.();
     } finally {
       setIsLoading(false);
     }
-  }, [dateId, logout]);
+  }, [dateId, logout, router]);
 
   useEffect(() => {
     fetchDateDetails();
   }, [fetchDateDetails]);
 
   const handleUpdateStatus = async (status: 'approved' | 'declined') => {
-    console.log(`[DateDetailScreen] handleUpdateStatus triggered with status: ${status}`);
-
-    if (!dateId || isSubmitting) {
-      return;
-    }
-
+    if (!dateId || isSubmitting) return;
     setIsSubmitting(true);
     try {
-      const response = await updateDate(dateId, { status });
-      console.log('[DateDetailScreen] API call successful. Response data:', response.data);
-
+      await updateDate(dateId, { status });
       showPopup('Success', `Date proposal has been ${status}.`, 'success', () => {
-        console.log('[DateDetailScreen] OK pressed on success popup. Refetching details...');
-        fetchDateDetails();
-        if (status === 'approved') {
-          router.back();
-        }
+        if (status === 'approved') router.back();
+        else fetchDateDetails();
       });
     } catch (error: any) {
-      console.error(
-        '[DateDetailScreen] API call to updateDate FAILED. Error:',
-        JSON.stringify(error, null, 2)
-      );
-      const errorMessage = error.response?.data?.message || 'An error occurred while responding.';
+      const errorMessage = error.response?.data?.message || 'An error occurred.';
       showPopup('Error', errorMessage, 'error');
     } finally {
-      console.log('[DateDetailScreen] Process finished. Setting isSubmitting to false.');
+      setIsSubmitting(false);
+    }
+  };
+
+  const handleCancelDate = () => {
+    Alert.alert('Cancel Date', 'Are you sure you want to cancel this date?', [
+      { text: 'No', style: 'cancel' },
+      {
+        text: 'Yes, Cancel',
+        style: 'destructive',
+        onPress: async () => {
+          if (!dateId || isSubmitting) return;
+          setIsSubmitting(true);
+          try {
+            await cancelDate(dateId);
+            showPopup(
+              'Date Cancelled',
+              'The date has been successfully cancelled.',
+              'success',
+              () => router.back()
+            );
+          } catch (error: any) {
+            showPopup('Error', error.response?.data?.message || 'Failed to cancel date.', 'error');
+          } finally {
+            setIsSubmitting(false);
+          }
+        },
+      },
+    ]);
+  };
+
+  const handleRescheduleSubmit = async (newDetails: {
+    date: string;
+    time: string;
+    locationMetadata: any;
+  }) => {
+    if (!dateId || isSubmitting) return;
+    setIsSubmitting(true);
+    setRescheduleModalVisible(false);
+    try {
+      await updateDate(dateId, newDetails);
+      showPopup(
+        'Date Rescheduled',
+        'The date details have been updated.',
+        'success',
+        fetchDateDetails
+      );
+    } catch (error: any) {
+      showPopup('Error', error.response?.data?.message || 'Failed to reschedule date.', 'error');
+    } finally {
       setIsSubmitting(false);
     }
   };
@@ -181,6 +282,26 @@ const DateDetailScreen = () => {
   const renderFooter = () => {
     if (!dateDetails || !auth0User) return null;
     const isRecipient = dateDetails.userTo.userId === auth0User.sub;
+    const isParticipant = dateDetails.userFrom.userId === auth0User.sub || isRecipient;
+
+    if (dateDetails.status === 'approved' && isParticipant) {
+      return (
+        <View style={styles.actionContainer}>
+          <TouchableOpacity
+            style={[styles.actionButton, styles.rescheduleButton]}
+            onPress={() => setRescheduleModalVisible(true)}
+            disabled={isSubmitting}>
+            <Text style={styles.actionButtonText}>Reschedule</Text>
+          </TouchableOpacity>
+          <TouchableOpacity
+            style={[styles.actionButton, styles.declineButton]}
+            onPress={handleCancelDate}
+            disabled={isSubmitting}>
+            <Text style={styles.actionButtonText}>Cancel Date</Text>
+          </TouchableOpacity>
+        </View>
+      );
+    }
 
     if (isRecipient && dateDetails.status === 'pending') {
       return (
@@ -222,15 +343,26 @@ const DateDetailScreen = () => {
     );
   }
 
-  if (!dateDetails) {
+  if (!dateDetails || !auth0User) {
     return (
       <SafeAreaView style={styles.container}>
+        <View style={styles.headerContainer}>
+          <TouchableOpacity onPress={() => router.back()} style={styles.backButton}>
+            <Image source={BACK_ARROW_ICON} style={styles.backIcon} />
+          </TouchableOpacity>
+        </View>
         <Text style={styles.title}>Date not found.</Text>
       </SafeAreaView>
     );
   }
 
-  const proposingUser = dateDetails.userFrom;
+  // ✅ THIS IS THE FIX: Determine which user to display
+  // Yeh check karega ke logged-in user kon hai aur doosre user ki details 'displayUser' mein daal dega.
+  const displayUser =
+    auth0User.sub === dateDetails.userFrom.userId ? dateDetails.userTo : dateDetails.userFrom;
+
+  // The bio video will always be from the proposer (userFrom), as per backend response structure.
+  const videoProposingUser = dateDetails.userFrom;
 
   return (
     <SafeAreaView style={styles.container}>
@@ -243,15 +375,17 @@ const DateDetailScreen = () => {
           <View style={{ width: 40 }} />
         </View>
 
-        <Text style={styles.title}>Date Proposal From</Text>
+        {/* ✅ FIX: Title ab 'Date with [Other User's Name]' dikhayega */}
+        <Text style={styles.title}>Date with {displayUser.firstName || 'User'}</Text>
 
+        {/* ✅ FIX: Yahan 'displayUser' ki details use ho rahi hain */}
         <View style={styles.userInfoContainer}>
           <Avatar.Image
             size={64}
-            source={{ uri: proposingUser.profilePictureUrl }}
+            source={{ uri: displayUser.profilePictureUrl }}
             style={styles.avatar}
           />
-          <Text style={styles.userName}>{proposingUser.firstName || 'User'}</Text>
+          <Text style={styles.userName}>{displayUser.firstName || 'User'}</Text>
         </View>
 
         <View style={styles.detailCard}>
@@ -271,9 +405,10 @@ const DateDetailScreen = () => {
           <Text style={styles.detailValue}>{dateDetails.locationMetadata?.name || 'N/A'}</Text>
         </View>
 
+        {/* Bio video proposer (userFrom) ka hi rahega kyunke backend se usi ka URL aata hai */}
         {playableVideoUrl && (
           <View>
-            <Text style={styles.videoLabel}>Bio Video</Text>
+            <Text style={styles.videoLabel}>Bio Video from {videoProposingUser.firstName}</Text>
             <View style={styles.videoContainer}>
               <Video
                 ref={videoRef}
@@ -300,7 +435,6 @@ const DateDetailScreen = () => {
 
       <View style={styles.footer}>{renderFooter()}</View>
 
-      {/* Naya popup render ho raha hai */}
       <BubblePopup
         visible={popupState.visible}
         type={popupState.type}
@@ -310,15 +444,23 @@ const DateDetailScreen = () => {
         onClose={() => {
           const callback = popupState.onCloseCallback;
           setPopupState((prev) => ({ ...prev, visible: false, onCloseCallback: undefined }));
-          if (callback) {
-            callback();
-          }
+          if (callback) callback();
         }}
       />
+
+      {dateDetails && (
+        <RescheduleModal
+          visible={isRescheduleModalVisible}
+          onClose={() => setRescheduleModalVisible(false)}
+          onSubmit={handleRescheduleSubmit}
+          currentDateDetails={dateDetails}
+        />
+      )}
     </SafeAreaView>
   );
 };
 
+// Styles (No changes from previous version)
 const styles = StyleSheet.create({
   container: { flex: 1, backgroundColor: screenColors.background },
   loadingContainer: {
@@ -410,6 +552,7 @@ const styles = StyleSheet.create({
   },
   acceptButton: { backgroundColor: screenColors.acceptButton },
   declineButton: { backgroundColor: screenColors.declineButton },
+  rescheduleButton: { backgroundColor: screenColors.rescheduleButton },
   actionButtonText: { fontSize: 18, fontWeight: 'bold', color: screenColors.buttonText },
   infoBox: {
     backgroundColor: screenColors.cardBackground,
@@ -418,8 +561,6 @@ const styles = StyleSheet.create({
     alignItems: 'center',
   },
   infoBoxText: { fontSize: 18, fontWeight: 'bold', color: screenColors.textPrimary },
-
-  // --- NAYE BUBBLE POPUP KE STYLES ---
   overlay: {
     flex: 1,
     backgroundColor: 'rgba(0, 0, 0, 0.7)',
@@ -427,18 +568,8 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     paddingHorizontal: 20,
   },
-  popupContainer: {
-    alignItems: 'center',
-    width: '100%',
-    maxWidth: 350,
-  },
-  popupImage: {
-    width: 220,
-    height: 220,
-    resizeMode: 'contain',
-    zIndex: 1,
-    marginBottom: -80,
-  },
+  popupContainer: { alignItems: 'center', width: '100%', maxWidth: 350 },
+  popupImage: { width: 220, height: 220, resizeMode: 'contain', zIndex: 1, marginBottom: -80 },
   bubble: {
     width: '90%',
     backgroundColor: '#FFFFFF',
@@ -472,22 +603,56 @@ const styles = StyleSheet.create({
     paddingHorizontal: 40,
     alignItems: 'center',
   },
-  errorButton: {
-    backgroundColor: screenColors.PinkPrimary,
+  errorButton: { backgroundColor: screenColors.PinkPrimary },
+  successButton: { backgroundColor: screenColors.GoldPrimary },
+  errorButtonText: { color: screenColors.White, fontSize: 15, fontWeight: 'bold' },
+  successButtonText: { color: screenColors.Black, fontSize: 15, fontWeight: 'bold' },
+  modalOverlay: {
+    flex: 1,
+    justifyContent: 'center',
+    alignItems: 'center',
+    backgroundColor: 'rgba(0,0,0,0.8)',
   },
-  successButton: {
-    backgroundColor: screenColors.GoldPrimary,
+  modalContent: {
+    width: '90%',
+    maxWidth: 400,
+    backgroundColor: screenColors.cardBackground,
+    borderRadius: 15,
+    padding: 25,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 5 },
+    shadowOpacity: 0.5,
+    shadowRadius: 15,
+    elevation: 10,
   },
-  errorButtonText: {
-    color: screenColors.White,
-    fontSize: 15,
+  modalTitle: {
+    fontSize: 22,
     fontWeight: 'bold',
+    color: screenColors.textPrimary,
+    marginBottom: 25,
+    textAlign: 'center',
   },
-  successButtonText: {
-    color: screenColors.Black,
-    fontSize: 15,
-    fontWeight: 'bold',
+  modalInput: {
+    backgroundColor: '#333',
+    color: screenColors.textPrimary,
+    borderRadius: 10,
+    paddingVertical: 12,
+    paddingHorizontal: 15,
+    marginBottom: 15,
+    fontSize: 16,
+    borderWidth: 1,
+    borderColor: '#444',
   },
+  modalButtonContainer: { flexDirection: 'row', justifyContent: 'space-between', marginTop: 15 },
+  modalButton: {
+    flex: 1,
+    paddingVertical: 14,
+    borderRadius: 10,
+    alignItems: 'center',
+    marginHorizontal: 8,
+  },
+  cancelModalButton: { backgroundColor: screenColors.cancelModalButton },
+  submitModalButton: { backgroundColor: screenColors.submitModalButton },
 });
 
 export default DateDetailScreen;

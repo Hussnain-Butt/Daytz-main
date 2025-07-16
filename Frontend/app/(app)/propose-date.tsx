@@ -1,6 +1,4 @@
-// --- COMPLETE FINAL UPDATED CODE: app/(app)/propose-date.tsx ---
-
-import React, { useState, useEffect, useCallback } from 'react';
+import React, { useState, useEffect, useCallback, useRef } from 'react';
 import {
   SafeAreaView,
   View,
@@ -15,6 +13,7 @@ import {
   ScrollView,
   KeyboardAvoidingView,
   Modal, // BubblePopup ke liye import
+  FlatList, // For autocomplete suggestions
 } from 'react-native';
 import { Text, Avatar } from 'react-native-paper';
 import { format, parseISO, isValid } from 'date-fns';
@@ -52,7 +51,6 @@ const screenColors = {
   buttonText: '#000000',
   avatarBorder: '#8E44AD',
   infoBoxBackground: '#2C2C2E',
-  // Bubble Popup ke liye colors
   PinkPrimary: '#FF6B6B',
   GoldPrimary: '#FFD700',
   Black: '#000000',
@@ -61,15 +59,11 @@ const screenColors = {
 
 // --- NEW BUBBLE POPUP COMPONENT ---
 const BubblePopup = ({ visible, type, title, message, buttonText, onClose }) => {
-  if (!visible) {
-    return null;
-  }
-
+  if (!visible) return null;
   const isSuccess = type === 'success';
   const imageSource = isSuccess ? calcHappyIcon : calcErrorIcon;
   const buttonStyle = isSuccess ? styles.successButton : styles.errorButton;
   const buttonTextStyle = isSuccess ? styles.successButtonText : styles.errorButtonText;
-
   return (
     <Modal transparent visible={visible} animationType="fade" onRequestClose={onClose}>
       <View style={styles.overlay}>
@@ -88,6 +82,16 @@ const BubblePopup = ({ visible, type, title, message, buttonText, onClose }) => 
   );
 };
 // --- END OF BUBBLE POPUP COMPONENT ---
+
+// --- Custom Hook for Debouncing ---
+const useDebounce = (value, delay) => {
+  const [debouncedValue, setDebouncedValue] = useState(value);
+  useEffect(() => {
+    const handler = setTimeout(() => setDebouncedValue(value), delay);
+    return () => clearTimeout(handler);
+  }, [value, delay]);
+  return debouncedValue;
+};
 
 const ProposeDateScreen = () => {
   const router = useRouter();
@@ -129,7 +133,6 @@ const ProposeDateScreen = () => {
   const [venueName, setVenueName] = useState('');
   const [isSubmitting, setIsSubmitting] = useState(false);
 
-  // =====> CUSTOM POPUP KE LIYE STATE <=====
   const [popupState, setPopupState] = useState({
     visible: false,
     type: 'error' as 'success' | 'error',
@@ -137,24 +140,60 @@ const ProposeDateScreen = () => {
     message: '',
     onCloseCallback: undefined as (() => void) | undefined,
   });
-  // ======================================
 
-  // =====> CUSTOM POPUP DIKHANE KE LIYE HELPER FUNCTION <=====
+  // --- States and Refs for Autocomplete ---
+  const [suggestions, setSuggestions] = useState([]);
+  const [showSuggestions, setShowSuggestions] = useState(false);
+  const [suggestionsPosition, setSuggestionsPosition] = useState({ top: 0, width: 0, left: 0 });
+  const debouncedVenueName = useDebounce(venueName, 500);
+  const venueInputRef = useRef<TextInput>(null);
+
   const showPopup = (
     title: string,
     message: string,
     type: 'success' | 'error' = 'error',
     onCloseCallback?: () => void
   ) => {
-    setPopupState({
-      visible: true,
-      title,
-      message,
-      type,
-      onCloseCallback,
-    });
+    setPopupState({ visible: true, title, message, type, onCloseCallback });
   };
-  // ========================================================
+
+  const GOOGLE_PLACES_API_KEY = 'AIzaSyCxKxK1sBXyfpme2zIJaseUa8E_KWWqHkM';
+
+  const fetchPlaceSuggestions = useCallback(async (input: string) => {
+    if (!input || input.length < 3) {
+      setSuggestions([]);
+      setShowSuggestions(false);
+      return;
+    }
+    try {
+      const response = await fetch(
+        `https://maps.googleapis.com/maps/api/place/autocomplete/json?input=${encodeURIComponent(
+          input
+        )}&key=${GOOGLE_PLACES_API_KEY}`
+      );
+      const json = await response.json();
+      if (json.predictions) {
+        setSuggestions(json.predictions);
+        setShowSuggestions(true);
+      } else {
+        setSuggestions([]);
+        setShowSuggestions(false);
+      }
+    } catch (error) {
+      console.error('Error fetching place suggestions:', error);
+      setSuggestions([]);
+      setShowSuggestions(false);
+    }
+  }, []);
+
+  useEffect(() => {
+    if (debouncedVenueName) {
+      fetchPlaceSuggestions(debouncedVenueName);
+    } else {
+      setSuggestions([]);
+      setShowSuggestions(false);
+    }
+  }, [debouncedVenueName, fetchPlaceSuggestions]);
 
   useEffect(() => {
     RNStatusBar.setBarStyle('light-content');
@@ -164,7 +203,6 @@ const ProposeDateScreen = () => {
       showPopup('Error', 'Required information is missing.', 'error', () => router.back());
       return;
     }
-
     const fetchInitialData = async () => {
       setIsLoading(true);
       try {
@@ -174,32 +212,35 @@ const ProposeDateScreen = () => {
           const response = await getUserById(userToId);
           setTargetUser(response.data || { firstName: 'User Not Found' });
         }
-      } catch (fetchError: any) {
+      } catch (fetchError) {
         setTargetUser({ firstName: 'Error Loading User' });
       }
-
       try {
         const dateResponse = await getDateByUserFromUserToAndDate(
           authUser.sub,
           userToId,
           dateForProposal
         );
-        if (dateResponse.data && dateResponse.data.status) {
+        if (dateResponse.data?.status)
           setExistingDateStatus(dateResponse.data.status as DateType['status']);
-        }
       } catch (dateError) {
         console.log('No existing date found, which is normal.');
       }
-
       setIsLoading(false);
     };
-
     fetchInitialData();
-  }, [userToId, dateForProposal, authUser?.sub]);
+  }, [userToId, dateForProposal, authUser?.sub, targetUserName, targetUserProfilePic]);
 
   const handleTimeConfirm = (time: Date) => {
     setSelectedTime(time);
     setShowTimePicker(false);
+  };
+
+  const handleSelectSuggestion = (suggestion: any) => {
+    setVenueName(suggestion.description);
+    setSuggestions([]);
+    setShowSuggestions(false);
+    Keyboard.dismiss();
   };
 
   const handleProposeDate = useCallback(async () => {
@@ -213,22 +254,14 @@ const ProposeDateScreen = () => {
       return;
     }
     setIsSubmitting(true);
-    const romantic = parseInt(romanticRatingStr || '0', 10);
-    const sexual = parseInt(sexualRatingStr || '0', 10);
-    const friendship = parseInt(friendshipRatingStr || '0', 10);
-    const payload: CreateDatePayload & {
-      romanticRating: number;
-      sexualRating: number;
-      friendshipRating: number;
-      isUpdate: boolean;
-    } = {
+    const payload = {
       userTo: userToId,
       date: format(selectedEventDate, 'yyyy-MM-dd'),
       time: format(selectedTime, 'HH:mm:ss'),
       locationMetadata: { name: venueName.trim(), address: '' },
-      romanticRating: romantic,
-      sexualRating: sexual,
-      friendshipRating: friendship,
+      romanticRating: parseInt(romanticRatingStr || '0', 10),
+      sexualRating: parseInt(sexualRatingStr || '0', 10),
+      friendshipRating: parseInt(friendshipRatingStr || '0', 10),
       isUpdate: isUpdate === 'true',
     };
     try {
@@ -261,7 +294,17 @@ const ProposeDateScreen = () => {
     romanticRatingStr,
     sexualRatingStr,
     friendshipRatingStr,
+    logout,
   ]);
+
+  const measureVenueInput = () => {
+    venueInputRef.current?.measure((fx, fy, width, height, px, py) => {
+      // py is the Y-position relative to the screen
+      // height is the height of the input
+      // We add a small margin (4)
+      setSuggestionsPosition({ top: py + height + 4, width, left: px });
+    });
+  };
 
   const renderFooter = () => {
     if (existingDateStatus === 'pending') {
@@ -272,7 +315,6 @@ const ProposeDateScreen = () => {
         </View>
       );
     }
-
     if (existingDateStatus === 'approved') {
       return (
         <View style={styles.infoBox}>
@@ -281,7 +323,6 @@ const ProposeDateScreen = () => {
         </View>
       );
     }
-
     return (
       <TouchableOpacity
         style={[styles.submitButton, isSubmitting && styles.disabledButton]}
@@ -309,7 +350,11 @@ const ProposeDateScreen = () => {
       <KeyboardAvoidingView
         behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
         style={{ flex: 1 }}>
-        <ScrollView contentContainerStyle={{ flexGrow: 1 }} keyboardShouldPersistTaps="handled">
+        {/* Main Content ScrollView */}
+        <ScrollView
+          contentContainerStyle={styles.scrollContentContainer}
+          keyboardShouldPersistTaps="handled"
+          showsVerticalScrollIndicator={false}>
           <View style={styles.innerContainer}>
             <View style={styles.headerContainer}>
               <TouchableOpacity onPress={() => router.back()} style={styles.backButton}>
@@ -335,16 +380,23 @@ const ProposeDateScreen = () => {
               <Text style={styles.dateDisplay}>
                 Date: {format(selectedEventDate, 'MMM dd, yyyy')}
               </Text>
+
+              {/* Venue Input Section */}
               <View style={styles.inputContainer}>
                 <Text style={styles.inputLabel}>Venue</Text>
                 <TextInput
+                  ref={venueInputRef}
                   style={styles.textInput}
                   placeholder="e.g., boo Club, East Anaheim Street..."
                   placeholderTextColor={screenColors.inputPlaceholder}
                   value={venueName}
                   onChangeText={setVenueName}
+                  onFocus={measureVenueInput} // Calculate position on focus
+                  onBlur={() => setTimeout(() => setShowSuggestions(false), 200)}
                 />
               </View>
+
+              {/* Time Input Section */}
               <View style={styles.inputContainer}>
                 <Text style={styles.inputLabel}>Time</Text>
                 <TouchableOpacity onPress={() => setShowTimePicker(true)} style={styles.textInput}>
@@ -358,20 +410,44 @@ const ProposeDateScreen = () => {
                 </TouchableOpacity>
               </View>
             </View>
-
-            <DateTimePickerModal
-              isVisible={showTimePicker}
-              mode="time"
-              onConfirm={handleTimeConfirm}
-              onCancel={() => setShowTimePicker(false)}
-            />
-
-            <View style={styles.footer}>{renderFooter()}</View>
           </View>
         </ScrollView>
+
+        {/* Footer outside ScrollView to stick to bottom */}
+        <View style={styles.footer}>{renderFooter()}</View>
       </KeyboardAvoidingView>
 
-      {/* Naya popup render ho raha hai */}
+      {/* Autocomplete FlatList is now a sibling, not a child, to avoid nesting error */}
+      {showSuggestions && suggestions.length > 0 && (
+        <FlatList
+          data={suggestions}
+          keyExtractor={(item) => item.place_id}
+          renderItem={({ item }) => (
+            <TouchableOpacity
+              style={styles.suggestionItem}
+              onPress={() => handleSelectSuggestion(item)}>
+              <Text style={styles.suggestionText}>{item.description}</Text>
+            </TouchableOpacity>
+          )}
+          style={[
+            styles.suggestionsList,
+            {
+              top: suggestionsPosition.top,
+              left: suggestionsPosition.left,
+              width: suggestionsPosition.width,
+            },
+          ]}
+          keyboardShouldPersistTaps="always"
+        />
+      )}
+
+      {/* Other Modals */}
+      <DateTimePickerModal
+        isVisible={showTimePicker}
+        mode="time"
+        onConfirm={handleTimeConfirm}
+        onCancel={() => setShowTimePicker(false)}
+      />
       <BubblePopup
         visible={popupState.visible}
         type={popupState.type}
@@ -381,9 +457,7 @@ const ProposeDateScreen = () => {
         onClose={() => {
           const callback = popupState.onCloseCallback;
           setPopupState((prev) => ({ ...prev, visible: false, onCloseCallback: undefined }));
-          if (callback) {
-            callback();
-          }
+          if (callback) callback();
         }}
       />
     </SafeAreaView>
@@ -391,12 +465,9 @@ const ProposeDateScreen = () => {
 };
 
 const styles = StyleSheet.create({
-  container: {
-    flex: 1,
-    backgroundColor: screenColors.background,
-    paddingTop: Platform.OS === 'android' ? RNStatusBar.currentHeight : 0,
-  },
-  innerContainer: { flex: 1, justifyContent: 'space-between', paddingHorizontal: 20 },
+  container: { flex: 1, backgroundColor: screenColors.background },
+  scrollContentContainer: { flexGrow: 1, justifyContent: 'space-between' },
+  innerContainer: { paddingHorizontal: 20 },
   mainContent: { flex: 1 },
   headerContainer: {
     flexDirection: 'row',
@@ -448,8 +519,11 @@ const styles = StyleSheet.create({
   footer: {
     width: '100%',
     paddingVertical: 20,
+    paddingHorizontal: 20,
     paddingBottom: Platform.OS === 'ios' ? 34 : 20,
     backgroundColor: screenColors.background,
+    borderTopWidth: 1,
+    borderTopColor: '#2C2C2E',
   },
   submitButton: {
     backgroundColor: screenColors.buttonBackground,
@@ -466,17 +540,8 @@ const styles = StyleSheet.create({
     padding: 16,
     alignItems: 'center',
   },
-  infoBoxText: {
-    fontSize: 18,
-    fontWeight: 'bold',
-    color: screenColors.textPrimary,
-  },
-  infoBoxSubText: {
-    fontSize: 14,
-    color: screenColors.textSecondary,
-    marginTop: 4,
-  },
-  // --- NAYE BUBBLE POPUP KE STYLES ---
+  infoBoxText: { fontSize: 18, fontWeight: 'bold', color: screenColors.textPrimary },
+  infoBoxSubText: { fontSize: 14, color: screenColors.textSecondary, marginTop: 4 },
   overlay: {
     flex: 1,
     backgroundColor: 'rgba(0, 0, 0, 0.7)',
@@ -484,18 +549,8 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     paddingHorizontal: 20,
   },
-  popupContainer: {
-    alignItems: 'center',
-    width: '100%',
-    maxWidth: 350,
-  },
-  popupImage: {
-    width: 220,
-    height: 220,
-    resizeMode: 'contain',
-    zIndex: 1,
-    marginBottom: -80,
-  },
+  popupContainer: { alignItems: 'center', width: '100%', maxWidth: 350 },
+  popupImage: { width: 220, height: 220, resizeMode: 'contain', zIndex: 1, marginBottom: -80 },
   bubble: {
     width: '90%',
     backgroundColor: '#FFFFFF',
@@ -529,22 +584,26 @@ const styles = StyleSheet.create({
     paddingHorizontal: 40,
     alignItems: 'center',
   },
-  errorButton: {
-    backgroundColor: screenColors.PinkPrimary,
+  errorButton: { backgroundColor: screenColors.PinkPrimary },
+  successButton: { backgroundColor: screenColors.GoldPrimary },
+  errorButtonText: { color: screenColors.White, fontSize: 15, fontWeight: 'bold' },
+  successButtonText: { color: screenColors.Black, fontSize: 15, fontWeight: 'bold' },
+  suggestionsList: {
+    position: 'absolute', // MUST BE ABSOLUTE
+    maxHeight: 200,
+    backgroundColor: screenColors.inputBackground,
+    borderRadius: 12,
+    borderWidth: 1,
+    borderColor: screenColors.avatarBorder,
+    zIndex: 1000, // HIGH Z-INDEX TO BE ON TOP OF EVERYTHING
+    elevation: 10, // For Android shadow
   },
-  successButton: {
-    backgroundColor: screenColors.GoldPrimary,
+  suggestionItem: {
+    padding: 15,
+    borderBottomWidth: 1,
+    borderBottomColor: '#3A3A3C',
   },
-  errorButtonText: {
-    color: screenColors.White,
-    fontSize: 15,
-    fontWeight: 'bold',
-  },
-  successButtonText: {
-    color: screenColors.Black,
-    fontSize: 15,
-    fontWeight: 'bold',
-  },
+  suggestionText: { color: screenColors.textPrimary, fontSize: 16 },
 });
 
 export default ProposeDateScreen;

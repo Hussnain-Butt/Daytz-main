@@ -1,12 +1,11 @@
 // File: src/repository/DatesRepository.ts
-// ✅ COMPLETE AND FINAL UPDATED CODE (with the temporary fix for testing)
+// ✅ COMPLETE AND FINAL UPDATED CODE
 
 import pool from '../db'
 import { DateObject as DateType, CreateDateInternal, UpcomingDate } from '../types/Date'
 import { PoolClient } from 'pg'
 import * as humps from 'humps'
 
-// mapRowToDate ab 'DateObject' expect karta hai aur usko 'DateType' banata hai.
 const mapRowToDate = (row: any): DateType | null => {
   if (!row) return null
   const camelized = humps.camelizeKeys(row)
@@ -42,45 +41,38 @@ class DatesRepository {
     return humps.camelizeKeys(rows[0])
   }
 
-  // This query is updated for easy testing.
+  // ✅ THIS QUERY IS UPDATED
   async getUpcomingDatesByUserId(userId: string): Promise<UpcomingDate[]> {
     console.log(`[DatesRepository] Fetching upcoming dates for user: ${userId}`)
     const query = `
       SELECT
         d.date_id as "dateId", 
         d.date, 
-        d.time, 
+        d.time,
+        d.updated_at as "updatedAt", -- ✅ YEH LINE ADD KI GAYI HAI
         d.location_metadata as "locationMetadata",
         d.user_from as "userFrom",
         d.user_to as "userTo",
+        feedback.outcome AS "myOutcome",
+        feedback.notes AS "myNotes",
         CASE
           WHEN d.user_from = $1 THEN 
-            json_build_object(
-              'userId', ut.user_id, 
-              'firstName', ut.first_name, 
-              'profilePictureUrl', ut.profile_picture_url
-            )
+            json_build_object('userId', ut.user_id, 'firstName', ut.first_name, 'profilePictureUrl', ut.profile_picture_url)
           ELSE 
-            json_build_object(
-              'userId', uf.user_id, 
-              'firstName', uf.first_name, 
-              'profilePictureUrl', uf.profile_picture_url
-            )
+            json_build_object('userId', uf.user_id, 'firstName', uf.first_name, 'profilePictureUrl', uf.profile_picture_url)
         END as "otherUser"
       FROM dates d
       JOIN users uf ON d.user_from = uf.user_id
       JOIN users ut ON d.user_to = ut.user_id
+      LEFT JOIN date_feedback AS feedback ON feedback.date_id = d.date_id AND feedback.user_id = $1
       WHERE (d.user_from = $1 OR d.user_to = $1)
       AND d.status = 'approved'
-      -- AND d.date >= CURRENT_DATE -- ✅ WAQTI TAUR PAR COMMENT KAR DIYA GAYA HAI, taake testing mein purani dates bhi nazar aayein.
-      ORDER BY d.date ASC, d.time ASC;
+      ORDER BY d.date DESC, d.time DESC;
     `
     try {
       const { rows } = await pool.query(query, [userId])
-      console.log(
-        `[DatesRepository] SQL query found ${rows.length} dates with 'approved' status for user ${userId}.`,
-      )
-      return rows as UpcomingDate[]
+      console.log(`[DatesRepository] SQL query found ${rows.length} dates for user ${userId}.`)
+      return rows.map((row) => humps.camelizeKeys(row)) as UpcomingDate[]
     } catch (error) {
       console.error(`[DatesRepository] Error executing getUpcomingDatesByUserId query:`, error)
       throw error
@@ -144,7 +136,7 @@ class DatesRepository {
     values.push(dateId)
     const query = `UPDATE dates SET ${fieldsToUpdate.join(
       ', ',
-    )} WHERE date_id = $${queryIndex} RETURNING *`
+    )}, updated_at = NOW() WHERE date_id = $${queryIndex} RETURNING *`
     const { rows } = await pool.query(query, values)
     return rows.length ? mapRowToDate(rows[0]) : null
   }

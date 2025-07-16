@@ -1,17 +1,13 @@
 // File: src/services/internal/NotificationService.ts
-// ✅ COMPLETE AND FINAL CORRECTED CODE (Typo Fixed)
+// ✅ COMPLETE AND FINAL UPDATED CODE
 
 import * as admin from 'firebase-admin'
 import { Pool, QueryResult } from 'pg'
 import pool from '../../db'
 
 // --- Firebase Initialization Logic ---
-// Check if Firebase app is already initialized
 if (!admin.apps.length) {
-  // 1. Get the service account JSON string from the environment variable.
   const serviceAccountString = process.env.FIREBASE_SERVICE_ACCOUNT
-
-  // 2. Add a critical check to ensure the variable is set.
   if (!serviceAccountString) {
     console.error(
       '[Firebase Admin] FATAL ERROR: The FIREBASE_SERVICE_ACCOUNT environment variable is not set.',
@@ -20,12 +16,8 @@ if (!admin.apps.length) {
       'Firebase service account credentials are not available in environment variables.',
     )
   }
-
   try {
-    // 3. Parse the JSON string into a JavaScript object.
     const serviceAccount = JSON.parse(serviceAccountString)
-
-    // 4. Initialize Firebase Admin SDK with the parsed credentials.
     admin.initializeApp({
       credential: admin.credential.cert(serviceAccount),
     })
@@ -59,8 +51,6 @@ class NotificationService {
   private db: Pool
 
   constructor() {
-    // The initialization is now done outside the class to ensure it runs only once.
-    // The constructor now only sets up the database pool.
     this.db = pool
   }
 
@@ -72,7 +62,6 @@ class NotificationService {
   ) {
     try {
       const query = `INSERT INTO notifications (user_id, message, type, status, related_entity_id) VALUES ($1, $2, $3, 'unread', $4);`
-      // Ensure relatedEntityId is a string for the database
       await this.db.query(query, [
         userId,
         message,
@@ -137,7 +126,6 @@ class NotificationService {
     const type = 'DATE_PROPOSAL'
 
     await this.createDbNotification(receiverUserId, body, type, dateDetails.dateId)
-
     const token = await this.getFcmToken(receiverUserId)
     if (token) {
       await this.sendFcmNotification(
@@ -158,10 +146,8 @@ class NotificationService {
     if (!userFromProfile || !userToProfile) return
 
     const fromName = `${userFromProfile.firstName || ''}`.trim() || 'Someone'
-    // ✅ FIX: Yahan 'userToFosile' ko theek karke 'userToProfile' kar diya gaya hai.
     const toName = `${userToProfile.firstName || ''}`.trim() || 'Someone'
 
-    // Notification for the person who initiated the match
     const messageToUserFrom = `It's a Match with ${toName}! 💖`
     await this.createDbNotification(userFromId, messageToUserFrom, 'MATCH', userToId)
     const tokenFrom = await this.getFcmToken(userFromId)
@@ -175,7 +161,6 @@ class NotificationService {
       )
     }
 
-    // Notification for the other person
     const messageToUserTo = `It's a Match with ${fromName}! 💖`
     await this.createDbNotification(userToId, messageToUserTo, 'MATCH', userFromId)
     const tokenTo = await this.getFcmToken(userToId)
@@ -186,33 +171,6 @@ class NotificationService {
         messageToUserTo,
         userFromProfile.profilePictureUrl,
         { type: 'MATCH', matchedUserId: userFromId },
-      )
-    }
-  }
-
-  async sendDateUpdateNotification(
-    updaterUserId: string,
-    receiverUserId: string,
-    dateId: number,
-    updateDetails: { venue?: string },
-  ) {
-    const updaterProfile = await this.getUserProfile(updaterUserId)
-    if (!updaterProfile) return
-
-    const updaterName = `${updaterProfile.firstName || ''}`.trim() || 'Someone'
-    const body = `${updaterName} has updated the details for your upcoming date.`
-    const type = 'DATE_UPDATE'
-
-    await this.createDbNotification(receiverUserId, body, type, dateId)
-
-    const token = await this.getFcmToken(receiverUserId)
-    if (token) {
-      await this.sendFcmNotification(
-        token,
-        'Date Details Updated!',
-        body,
-        updaterProfile.profilePictureUrl,
-        { type, dateId: String(dateId) },
       )
     }
   }
@@ -230,10 +188,9 @@ class NotificationService {
     const actionText = responseType === 'ACCEPTED' ? 'accepted' : 'declined'
     const title = responseType === 'ACCEPTED' ? 'Date Accepted! ✅' : 'Date Update'
     const body = `${responderName} has ${actionText} your date proposal.`
-    const type = `DATE_${responseType === 'ACCEPTED' ? 'APPROVED' : 'DECLINED'}` // Use APPROVED/DECLINED for consistency
+    const type = `DATE_${responseType === 'ACCEPTED' ? 'APPROVED' : 'DECLINED'}`
 
     await this.createDbNotification(receiverUserId, body, type, dateId)
-
     const token = await this.getFcmToken(receiverUserId)
     if (token) {
       await this.sendFcmNotification(token, title, body, responderProfile.profilePictureUrl, {
@@ -242,7 +199,58 @@ class NotificationService {
       })
     }
   }
+
+  // ✅ NEW: Reschedule ke liye notification
+  async sendDateRescheduledNotification(
+    updaterUserId: string,
+    receiverUserId: string,
+    dateId: number,
+  ) {
+    const updaterProfile = await this.getUserProfile(updaterUserId)
+    if (!updaterProfile) return
+
+    const updaterName = `${updaterProfile.firstName || ''}`.trim() || 'Someone'
+    const body = `${updaterName} has rescheduled your date. Tap to see the new details.`
+    const type = 'DATE_RESCHEDULED'
+
+    await this.createDbNotification(receiverUserId, body, type, dateId)
+    const token = await this.getFcmToken(receiverUserId)
+    if (token) {
+      await this.sendFcmNotification(
+        token,
+        '🗓️ Date Rescheduled',
+        body,
+        updaterProfile.profilePictureUrl,
+        { type, dateId: String(dateId) },
+      )
+    }
+  }
+
+  // ✅ NEW: Cancel ke liye notification
+  async sendDateCancelledNotification(
+    cancellerUserId: string,
+    receiverUserId: string,
+    dateId: number,
+  ) {
+    const cancellerProfile = await this.getUserProfile(cancellerUserId)
+    if (!cancellerProfile) return
+
+    const cancellerName = `${cancellerProfile.firstName || ''}`.trim() || 'Someone'
+    const body = `${cancellerName} has cancelled your upcoming date.`
+    const type = 'DATE_CANCELLED'
+
+    await this.createDbNotification(receiverUserId, body, type, dateId)
+    const token = await this.getFcmToken(receiverUserId)
+    if (token) {
+      await this.sendFcmNotification(
+        token,
+        '😟 Date Cancelled',
+        body,
+        cancellerProfile.profilePictureUrl,
+        { type, dateId: String(dateId) },
+      )
+    }
+  }
 }
 
-// Export the class definition itself, not an instance of it.
 export default NotificationService
