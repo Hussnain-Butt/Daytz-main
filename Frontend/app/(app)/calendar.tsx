@@ -1,5 +1,5 @@
 // File: app/(app)/calendar.tsx
-// ✅ COMPLETE AND FINAL UPDATED FILE (WITH LOGOUT ICON)
+// ✅ COMPLETE AND FINAL UPDATED FILE (WITH LOGOUT ICON AND COMBINED FEEDBACK BUTTON)
 
 import React, { useState, useCallback, useEffect } from 'react';
 import {
@@ -42,9 +42,8 @@ const NOTIFICATION_ICON = require('../../assets/notification_bell_icon.png');
 const calcHappyIcon = require('../../assets/calc-happy.png');
 const calcErrorIcon = require('../../assets/calc-error.png');
 
-// --- (FeedbackModal and BubblePopup components remain unchanged) ---
+// --- FeedbackModal component updated ---
 const FeedbackModal = ({ visible, onClose, onSubmit }) => {
-  // ... (no changes in this component)
   const [selectedOutcome, setSelectedOutcome] = useState<DateOutcome | null>(null);
   const [notes, setNotes] = useState('');
   const [isLoading, setIsLoading] = useState(false);
@@ -91,28 +90,19 @@ const FeedbackModal = ({ visible, onClose, onSubmit }) => {
               onPress={() => handleSelectOutcome('amazing')}>
               <Text style={styles.feedbackButtonText}>Date Went Amazing</Text>
             </TouchableOpacity>
-            <View style={styles.halfWidthRow}>
-              <TouchableOpacity
-                style={[
-                  styles.feedbackButton,
-                  styles.halfWidthButton,
-                  styles.stoodUpButton,
-                  selectedOutcome === 'stood_up' && styles.selectedButton,
-                ]}
-                onPress={() => handleSelectOutcome('stood_up')}>
-                <Text style={styles.feedbackButtonText}>Stood Up</Text>
-              </TouchableOpacity>
-              <TouchableOpacity
-                style={[
-                  styles.feedbackButton,
-                  styles.halfWidthButton,
-                  styles.cancelledButton,
-                  selectedOutcome === 'cancelled' && styles.selectedButton,
-                ]}
-                onPress={() => handleSelectOutcome('cancelled')}>
-                <Text style={styles.feedbackButtonText}>Cancelled</Text>
-              </TouchableOpacity>
-            </View>
+
+            {/* ✅ COMBINED "STOOD UP / CANCELLED" BUTTON */}
+            <TouchableOpacity
+              style={[
+                styles.feedbackButton,
+                styles.fullWidthButton,
+                styles.noShowButton,
+                selectedOutcome === 'no_show_cancelled' && styles.selectedButton,
+              ]}
+              onPress={() => handleSelectOutcome('no_show_cancelled')}>
+              <Text style={styles.feedbackButtonText}>Stood Up / Cancelled</Text>
+            </TouchableOpacity>
+
             <TouchableOpacity
               style={[
                 styles.feedbackButton,
@@ -129,7 +119,7 @@ const FeedbackModal = ({ visible, onClose, onSubmit }) => {
             <TextInput
               style={styles.notesInput}
               placeholder="Tell us more about your date... (max 2500 characters)"
-              placeholderTextColor="#666"
+              placeholderTextColor={colors.placeholderTextColor || '#9CA4A4'}
               multiline
               maxLength={2500}
               value={notes}
@@ -142,11 +132,14 @@ const FeedbackModal = ({ visible, onClose, onSubmit }) => {
               <Text style={styles.closeButtonText}>Cancel</Text>
             </TouchableOpacity>
             <TouchableOpacity
-              style={[styles.submitButton, !selectedOutcome && styles.disabledButton]}
+              style={[
+                styles.submitButton,
+                (!selectedOutcome || isLoading) && styles.disabledButton,
+              ]}
               onPress={handleSubmit}
               disabled={!selectedOutcome || isLoading}>
               {isLoading ? (
-                <ActivityIndicator color="#fff" />
+                <ActivityIndicator color={colors.White} />
               ) : (
                 <Text style={styles.submitButtonText}>Submit</Text>
               )}
@@ -157,8 +150,8 @@ const FeedbackModal = ({ visible, onClose, onSubmit }) => {
     </Modal>
   );
 };
+
 const BubblePopup = ({ visible, type, title, message, buttonText, onClose }) => {
-  // ... (no changes in this component)
   if (!visible) return null;
   const isSuccess = type === 'success';
   const imageSource = isSuccess ? calcHappyIcon : calcErrorIcon;
@@ -182,7 +175,6 @@ const BubblePopup = ({ visible, type, title, message, buttonText, onClose }) => 
   );
 };
 const getTypeOfAttraction = (r, s, f) => {
-  // ... (no changes in this function)
   const interest = r + s + f;
   if (interest === 0) return 'Not Specified';
   if (s === 0 && r === 0 && f === 0) return 'No Interest';
@@ -198,7 +190,6 @@ const getTypeOfAttraction = (r, s, f) => {
   return 'My Person!';
 };
 const UpcomingDateItem = ({ item, onPress, onRatePress }) => {
-  // ... (no changes in this component)
   const attractionType = getTypeOfAttraction(
     item.romanticRating,
     item.sexualRating,
@@ -223,14 +214,14 @@ const UpcomingDateItem = ({ item, onPress, onRatePress }) => {
         </Text>
         {(item.romanticRating > 0 || item.sexualRating > 0 || item.friendshipRating > 0) && (
           <View style={styles.attractionTypeContainer}>
-            <Ionicons name="heart-circle" size={16} color={colors.PinkPrimary || '#f87171'} />
+            <Ionicons name="heart-circle" size={16} color={colors.PinkPrimary} />
             <Text style={styles.attractionTypeText}>{attractionType}</Text>
           </View>
         )}
       </View>
       <View style={styles.statusSection}>
         <View style={styles.statusContainer}>
-          <Ionicons name="checkmark-circle" size={20} color={colors.Success || '#28a745'} />
+          <Ionicons name="checkmark-circle" size={20} color={colors.Success} />
           <Text style={styles.statusText}>Approved</Text>
         </View>
         {canGiveFeedback && (
@@ -268,7 +259,6 @@ const CalendarHomeScreen = () => {
     setPopupState({ visible: true, title, message, type });
   };
 
-  // --- (Logic functions remain unchanged) ---
   const fetchAllScreenData = useCallback(async () => {
     if (!auth0User?.sub) {
       setIsCalendarLoading(false);
@@ -447,14 +437,14 @@ const CalendarHomeScreen = () => {
               {tokenBalance !== null ? (
                 `${tokenBalance} ${tokenBalance === 1 ? 'coin' : 'coins'}`
               ) : (
-                <ActivityIndicator size="small" color="#FFFFFF" />
+                <ActivityIndicator size="small" color={colors.White} />
               )}
             </Text>
           </View>
         </View>
         <View style={styles.headerGroupRight}>
           <TouchableOpacity style={styles.iconButton} onPress={() => router.push('/(app)/profile')}>
-            <Ionicons name="home-outline" size={26} color="#FFFFFF" />
+            <Ionicons name="home-outline" size={26} color={colors.White} />
           </TouchableOpacity>
           <TouchableOpacity
             style={styles.iconButton}
@@ -462,16 +452,15 @@ const CalendarHomeScreen = () => {
               setUnreadCount(0);
               router.push('/(app)/notifications');
             }}>
-            <Ionicons name="notifications-outline" size={25} color="#FFFFFF" />
+            <Ionicons name="notifications-outline" size={25} color={colors.White} />
             {unreadCount > 0 && (
               <View style={styles.notificationBadge}>
                 <Text style={styles.notificationBadgeText}>{unreadCount}</Text>
               </View>
             )}
           </TouchableOpacity>
-          {/* ✅ LOGOUT BUTTON REPLACED WITH ICON */}
           <TouchableOpacity style={styles.iconButton} onPress={logout}>
-            <Ionicons name="log-out-outline" size={28} color={colors.PinkPrimary || '#f87171'} />
+            <Ionicons name="log-out-outline" size={28} color={colors.PinkPrimary} />
           </TouchableOpacity>
         </View>
       </View>
@@ -479,7 +468,11 @@ const CalendarHomeScreen = () => {
       <ScrollView
         contentContainerStyle={{ paddingBottom: 40 }}
         refreshControl={
-          <RefreshControl refreshing={isRefreshing} onRefresh={onRefresh} tintColor="#FFFFFF" />
+          <RefreshControl
+            refreshing={isRefreshing}
+            onRefresh={onRefresh}
+            tintColor={colors.White}
+          />
         }>
         {isCalendarLoading ? (
           <View style={[styles.loadingContainer, { minHeight: 400 }]}>
@@ -493,7 +486,7 @@ const CalendarHomeScreen = () => {
         <View style={styles.upcomingSection}>
           <Text style={styles.upcomingTitle}>Upcoming & Past Dates</Text>
           {isUpcomingLoading && upcomingDates.length === 0 ? (
-            <ActivityIndicator color="#FFF" style={{ marginTop: 20 }} />
+            <ActivityIndicator color={colors.White} style={{ marginTop: 20 }} />
           ) : upcomingDates.length > 0 ? (
             <View style={styles.listContainer}>
               {upcomingDates.map((item, index) => (
@@ -533,7 +526,7 @@ const CalendarHomeScreen = () => {
 const styles = StyleSheet.create({
   safeArea: {
     flex: 1,
-    backgroundColor: colors.Background || '#121212',
+    backgroundColor: colors.Background || '#2D2D2D',
     paddingTop: Platform.OS === 'android' ? 40 : 0,
   },
   loadingContainer: { flex: 1, justifyContent: 'center', alignItems: 'center' },
@@ -545,81 +538,77 @@ const styles = StyleSheet.create({
     paddingBottom: 15,
     height: 60,
   },
-  headerGroupLeft: {
-    flexDirection: 'row',
-    alignItems: 'center',
-  },
-  headerGroupRight: {
-    flexDirection: 'row',
-    alignItems: 'center',
-  },
-  logoImage: {
-    width: 80,
-    height: 28,
-    resizeMode: 'contain',
-    marginRight: 15,
-  },
+  headerGroupLeft: { flexDirection: 'row', alignItems: 'center' },
+  headerGroupRight: { flexDirection: 'row', alignItems: 'center' },
+  logoImage: { width: 80, height: 28, resizeMode: 'contain', marginRight: 15 },
   tokenDisplayContainer: {
     flexDirection: 'row',
     alignItems: 'center',
-    backgroundColor: '#000000',
+    backgroundColor: colors.Black || '#000000',
     borderRadius: 20,
     paddingHorizontal: 12,
     paddingVertical: 6,
   },
   tokenIcon: { width: 20, height: 20, marginRight: 8 },
-  tokenTextValue: { color: '#FFFFFF', fontSize: 14, fontWeight: 'bold' },
-  iconButton: {
-    paddingHorizontal: 8, // Added horizontal padding for better spacing
-  },
+  tokenTextValue: { color: colors.White || '#FFFFFF', fontSize: 14, fontWeight: 'bold' },
+  iconButton: { paddingHorizontal: 8 },
   notificationBadge: {
     position: 'absolute',
     top: 0,
     right: 2,
-    backgroundColor: 'red',
+    backgroundColor: colors.Red || '#F46A6A',
     borderRadius: 9,
     width: 18,
     height: 18,
     justifyContent: 'center',
     alignItems: 'center',
     borderWidth: 1,
-    borderColor: '#121212',
+    borderColor: colors.Background || '#2D2D2D',
   },
-  notificationBadgeText: { color: 'white', fontSize: 10, fontWeight: 'bold' },
-  // ✅ Removed logoutButton and logoutButtonText styles as they are no longer needed
+  notificationBadgeText: { color: colors.White || '#FFFFFF', fontSize: 10, fontWeight: 'bold' },
   calendarGridContainer: { paddingHorizontal: 15 },
   upcomingSection: { marginTop: 30, paddingHorizontal: 15 },
-  upcomingTitle: { fontSize: 22, fontWeight: 'bold', color: '#FFFFFF', marginBottom: 10 },
+  upcomingTitle: {
+    fontSize: 22,
+    fontWeight: 'bold',
+    color: colors.White || '#FFFFFF',
+    marginBottom: 10,
+  },
   listContainer: {
-    backgroundColor: colors.DarkGrey || '#1C1C1E',
+    backgroundColor: colors.GreyDark || '#1E1E1E',
     borderRadius: 12,
     paddingHorizontal: 10,
   },
-  separator: { height: 1, backgroundColor: '#3A3A3C' },
-  noUpcomingText: { color: '#AAAAAA', textAlign: 'center', marginTop: 20, fontSize: 16 },
+  separator: { height: 1, backgroundColor: colors.LightBackground || '#3F3F3F' },
+  noUpcomingText: {
+    color: colors.GreyBackground || '#AAAAAA',
+    textAlign: 'center',
+    marginTop: 20,
+    fontSize: 16,
+  },
   upcomingItem: { flexDirection: 'row', alignItems: 'center', paddingVertical: 15 },
   upcomingItemDetails: { flex: 1, marginLeft: 12, gap: 2 },
-  upcomingItemName: { fontSize: 16, fontWeight: 'bold', color: '#FFFFFF' },
-  upcomingItemInfo: { fontSize: 13, color: '#EBEBF599' },
-  upcomingItemTime: { fontSize: 13, color: '#EBEBF599', fontWeight: '500' },
+  upcomingItemName: { fontSize: 16, fontWeight: 'bold', color: colors.White || '#FFFFFF' },
+  upcomingItemInfo: { fontSize: 13, color: colors.Grey || '#9CA4A4' },
+  upcomingItemTime: { fontSize: 13, color: colors.Grey || '#9CA4A4', fontWeight: '500' },
   attractionTypeContainer: { flexDirection: 'row', alignItems: 'center', marginTop: 6 },
   attractionTypeText: {
     marginLeft: 6,
     fontSize: 13,
-    color: colors.PinkPrimary || '#f87171',
+    color: colors.PinkPrimary || '#ff149d',
     fontWeight: '600',
   },
   statusSection: { alignItems: 'center', marginLeft: 10 },
   statusContainer: {
     flexDirection: 'row',
     alignItems: 'center',
-    backgroundColor: 'rgba(40, 167, 69, 0.15)',
+    backgroundColor: 'rgba(58, 219, 118, 0.15)', // Using a static color for Success background
     borderRadius: 12,
     paddingVertical: 6,
     paddingHorizontal: 10,
   },
   statusText: {
-    color: colors.Success || '#28a745',
+    color: colors.Success || '#3ADB76',
     marginLeft: 5,
     fontSize: 12,
     fontWeight: '600',
@@ -631,8 +620,13 @@ const styles = StyleSheet.create({
     paddingVertical: 5,
     paddingHorizontal: 12,
   },
-  rateButtonText: { color: '#FFFFFF', fontSize: 12, fontWeight: 'bold' },
-  feedbackSentText: { marginTop: 8, color: colors.GoldPrimary, fontSize: 12, fontStyle: 'italic' },
+  rateButtonText: { color: colors.White || '#FFFFFF', fontSize: 12, fontWeight: 'bold' },
+  feedbackSentText: {
+    marginTop: 8,
+    color: colors.GoldPrimary,
+    fontSize: 12,
+    fontStyle: 'italic',
+  },
   overlay: {
     flex: 1,
     backgroundColor: 'rgba(0, 0, 0, 0.7)',
@@ -644,7 +638,7 @@ const styles = StyleSheet.create({
   popupImage: { width: 220, height: 220, resizeMode: 'contain', zIndex: 1, marginBottom: -80 },
   bubble: {
     width: '90%',
-    backgroundColor: '#FFFFFF',
+    backgroundColor: colors.White || '#FFFFFF',
     borderRadius: 25,
     padding: 20,
     paddingTop: 90,
@@ -658,13 +652,13 @@ const styles = StyleSheet.create({
   popupTitle: {
     fontSize: 28,
     fontWeight: 'bold',
-    color: '#000000',
+    color: colors.Black || '#000000',
     textAlign: 'center',
     marginBottom: 15,
   },
   popupMessage: {
     fontSize: 17,
-    color: '#333333',
+    color: colors.LightBlack || '#222B45',
     textAlign: 'center',
     marginBottom: 25,
     lineHeight: 24,
@@ -675,74 +669,78 @@ const styles = StyleSheet.create({
     paddingHorizontal: 40,
     alignItems: 'center',
   },
-  errorButton: { backgroundColor: colors.PinkPrimary || '#FF6B6B' },
-  successButton: { backgroundColor: colors.GoldPrimary || '#FFD700' },
+  errorButton: { backgroundColor: colors.PinkPrimary || '#ff149d' },
+  successButton: { backgroundColor: colors.GoldPrimary || '#FFDB5C' },
   errorButtonText: { color: colors.White || '#FFFFFF', fontSize: 15, fontWeight: 'bold' },
   successButtonText: { color: colors.Black || '#000000', fontSize: 15, fontWeight: 'bold' },
+
+  // --- MODAL STYLES (UPDATED) ---
   modalOverlay: { flex: 1, backgroundColor: 'rgba(0, 0, 0, 0.8)', justifyContent: 'flex-end' },
   modalContainer: {
-    backgroundColor: '#1E1E1E',
+    backgroundColor: colors.GreyDark || '#1E1E1E',
     borderTopLeftRadius: 20,
     borderTopRightRadius: 20,
     padding: 20,
     paddingBottom: 40,
   },
-  modalTitle: { color: '#fff', fontSize: 24, fontWeight: 'bold', textAlign: 'center' },
+  modalTitle: {
+    color: colors.White || '#FFFFFF',
+    fontSize: 24,
+    fontWeight: 'bold',
+    textAlign: 'center',
+  },
   modalSubtitle: {
-    color: '#aaa',
+    color: colors.GreyBackground || '#AAAAAA',
     fontSize: 14,
     textAlign: 'center',
     marginTop: 8,
     marginBottom: 25,
   },
-  feedbackOptionsContainer: { marginBottom: 20 },
-  halfWidthRow: { flexDirection: 'row', justifyContent: 'space-between', marginBottom: 10 },
+  feedbackOptionsContainer: { gap: 10, marginBottom: 20 },
   feedbackButton: {
-    paddingVertical: 15,
+    paddingVertical: 16,
     borderRadius: 12,
     borderWidth: 2,
     borderColor: 'transparent',
     alignItems: 'center',
     justifyContent: 'center',
+    transition: 'transform 0.2s ease-in-out',
   },
-  fullWidthButton: { width: '100%', marginBottom: 10 },
-  halfWidthButton: { width: '48%' },
-  amazingButton: { backgroundColor: '#00BFFF' },
-  stoodUpButton: { backgroundColor: '#FFD700' },
-  cancelledButton: { backgroundColor: '#FFA500' },
-  otherButton: { backgroundColor: '#FF4500' },
-  feedbackButtonText: { color: '#fff', fontWeight: 'bold', textAlign: 'center' },
-  selectedButton: { borderColor: '#fff', transform: [{ scale: 1.05 }] },
+  fullWidthButton: { width: '100%' },
+  amazingButton: { backgroundColor: colors.TealPrimary || '#00E0FF' },
+  // ✅ NEW STYLE FOR THE COMBINED BUTTON
+  noShowButton: { backgroundColor: '#FFA500' },
+  otherButton: { backgroundColor: '#FF4500' }, // Red-Orange as per image
+  feedbackButtonText: { color: colors.White || '#FFFFFF', fontWeight: 'bold', textAlign: 'center' },
+  selectedButton: { borderColor: colors.White || '#FFFFFF', transform: [{ scale: 1.02 }] },
   notesInput: {
-    backgroundColor: '#333',
-    color: '#fff',
+    backgroundColor: colors.LightBackground || '#3F3F3F',
+    color: colors.White || '#FFFFFF',
     borderRadius: 10,
     padding: 15,
-    height: 120,
+    height: 100,
     textAlignVertical: 'top',
     fontSize: 16,
     marginBottom: 20,
   },
-  modalActions: { flexDirection: 'row', justifyContent: 'space-between' },
+  modalActions: { flexDirection: 'row', justifyContent: 'space-between', gap: 10 },
   closeButton: {
-    backgroundColor: '#555',
-    paddingVertical: 15,
+    backgroundColor: '#4A4A4A',
+    paddingVertical: 16,
     borderRadius: 12,
     flex: 1,
-    marginRight: 10,
     alignItems: 'center',
   },
-  closeButtonText: { color: '#fff', fontWeight: 'bold', fontSize: 16 },
+  closeButtonText: { color: colors.White || '#FFFFFF', fontWeight: 'bold', fontSize: 16 },
   submitButton: {
-    backgroundColor: colors.PinkPrimary,
-    paddingVertical: 15,
+    backgroundColor: colors.PinkPrimary || '#ff149d',
+    paddingVertical: 16,
     borderRadius: 12,
     flex: 1,
-    marginLeft: 10,
     alignItems: 'center',
   },
-  submitButtonText: { color: '#fff', fontWeight: 'bold', fontSize: 16 },
-  disabledButton: { backgroundColor: '#888' },
+  submitButtonText: { color: colors.White || '#FFFFFF', fontWeight: 'bold', fontSize: 16 },
+  disabledButton: { backgroundColor: colors.DarkGrey || '#828282' },
 });
 
 export default CalendarHomeScreen;

@@ -1,3 +1,5 @@
+// File: app/(app)/profile.tsx
+
 import React, { useState, useEffect, useCallback, useRef } from 'react';
 import {
   SafeAreaView,
@@ -10,10 +12,13 @@ import {
   ActivityIndicator,
   Platform,
   Text,
-  Image, // Image ko import karein
-  Modal, // Naye popup ke liye Modal import karein
-  TouchableOpacity, // TouchableOpacity ko import karein
-  Alert, // Standard Alert ko bhi rakhein (logout ke liye)
+  Image,
+  Modal,
+  TouchableOpacity,
+  Alert,
+  // ✅ CHANGE: KeyboardAvoidingView aur StatusBar ko import karein
+  KeyboardAvoidingView,
+  StatusBar as RNStatusBar,
 } from 'react-native';
 import {
   Button,
@@ -47,17 +52,16 @@ const calcHappyIcon = require('../../assets/calc-happy.png');
 const calcErrorIcon = require('../../assets/calc-error.png');
 // =====================================================================
 
-// --- NEW BUBBLE POPUP COMPONENT ---
+// --- NEW BUBBLE POPUP COMPONENT (UNCHANGED) ---
 const BubblePopup = ({ visible, type, title, message, buttonText, onClose }) => {
   if (!visible) {
     return null;
   }
-
+  // (Component ka code waisa hi hai, isliye yahan se hata diya hai)
   const isSuccess = type === 'success';
   const imageSource = isSuccess ? calcHappyIcon : calcErrorIcon;
   const buttonStyle = isSuccess ? styles.successButton : styles.errorButton;
   const buttonTextStyle = isSuccess ? styles.successButtonText : styles.errorButtonText;
-
   return (
     <Modal transparent visible={visible} animationType="fade" onRequestClose={onClose}>
       <View style={styles.overlay}>
@@ -76,6 +80,10 @@ const BubblePopup = ({ visible, type, title, message, buttonText, onClose }) => 
   );
 };
 // --- END OF BUBBLE POPUP COMPONENT ---
+
+// Baaki saara logic (functions, state, etc.) waisa hi hai.
+// Main sirf render functions aur styles mein changes kar raha hoon.
+// ... (All logic functions from original file are here) ...
 
 interface ImagePickerResult {
   uri: string;
@@ -106,17 +114,13 @@ const Profile = () => {
   const [isLoadingPlayableUrl, setIsLoadingPlayableUrl] = useState(false);
   const [videoPlaybackError, setVideoPlaybackError] = useState<string | null>(null);
   const videoPlayerRef = useRef<Video>(null);
-
-  // =====> CUSTOM POPUP KE LIYE STATE <=====
   const [popupState, setPopupState] = useState({
     visible: false,
-    type: 'error', // 'success' or 'error'
+    type: 'error' as 'success' | 'error',
     title: '',
     message: '',
   });
-  // ======================================
 
-  // =====> CUSTOM POPUP DIKHANE KE LIYE HELPER FUNCTION <=====
   const showPopup = (title: string, message: string, type: 'success' | 'error' = 'error') => {
     setPopupState({
       visible: true,
@@ -125,7 +129,6 @@ const Profile = () => {
       type,
     });
   };
-  // ========================================================
 
   const fetchTokenBalance = useCallback(async () => {
     if (!userProfile?.userId) return;
@@ -401,149 +404,165 @@ const Profile = () => {
   );
 
   const renderEditableUserInfo = () => (
-    <ScrollView
-      style={styles.scrollView}
-      contentContainerStyle={styles.scrollContent}
-      keyboardShouldPersistTaps="handled">
-      <View style={styles.userInfoContainer}>
-        {isInitialSetup && !profileJustCompleted && (
-          <Text style={styles.setupTitle}>Complete Your Profile</Text>
-        )}
-        <Avatar.Image
-          size={80}
-          source={{ uri: image?.uri || userProfile?.profilePictureUrl || DEFAULT_AVATAR }}
-          style={styles.avatar}
-        />
-        <Button
-          icon="camera"
-          mode="outlined"
-          style={styles.mediaButton}
-          onPress={() => pickMediaFromLibrary('Images')}
-          disabled={isSaving}>
-          {image ? 'Change Pic' : userProfile?.profilePictureUrl ? 'Change Pic' : 'Upload'}
-        </Button>
-        {(isInitialSetup || !userProfile?.is_profile_complete) &&
-          !userProfile?.profilePictureUrl &&
-          !image && <Text style={styles.requiredText}>* Pic required</Text>}
-        <Divider style={styles.divider} />
-        <Text style={styles.fieldLabel}>Bio Video (Max {MAX_BIO_VIDEO_DURATION_SECONDS}s)</Text>
-        {video ? (
-          <Text
-            style={styles.videoSelectedText}
-            numberOfLines={1}
-            ellipsizeMode="middle">{`Selected: ${video.name}`}</Text>
-        ) : userProfile?.videoUrl ? (
-          <Text style={styles.videoSelectedText}>Current video uploaded</Text>
-        ) : (
-          <Text style={styles.videoSelectedText}>(No bio video)</Text>
-        )}
-        <View style={styles.mediaActionsRow}>
-          <Button
-            icon="record-circle-outline"
-            mode="outlined"
-            style={[styles.mediaButton, styles.flexButton]}
-            onPress={() => recordMediaWithCamera('Videos')}
-            disabled={isSaving}>
-            Record
-          </Button>
-          <Button
-            icon="video-image"
-            mode="outlined"
-            style={[styles.mediaButton, styles.flexButton]}
-            onPress={() => pickMediaFromLibrary('Videos')}
-            disabled={isSaving}>
-            {video ? 'Change Lib' : userProfile?.videoUrl ? 'Change Lib' : 'Upload'}
-          </Button>
-        </View>
-        {(isInitialSetup || !userProfile?.is_profile_complete) &&
-          !userProfile?.videoUrl &&
-          !video && <Text style={styles.requiredText}>* Bio video required</Text>}
-        <Divider style={styles.divider} />
-        <Text style={styles.fieldLabel}>First Name</Text>
-        <TextInput
-          style={styles.textInput}
-          value={editedProfile.firstName || ''}
-          onChangeText={(t) => setEditedProfile((p) => ({ ...p, firstName: t }))}
-          placeholder="First Name"
-          editable={!isSaving}
-          autoCapitalize="words"
-          textContentType="givenName"
-        />
-        {!editedProfile.firstName?.trim() && <Text style={styles.requiredText}>* Required</Text>}
-        <Text style={styles.fieldLabel}>Last Name</Text>
-        <TextInput
-          style={styles.textInput}
-          value={editedProfile.lastName || ''}
-          onChangeText={(t) => setEditedProfile((p) => ({ ...p, lastName: t }))}
-          placeholder="Last Name"
-          editable={!isSaving}
-          autoCapitalize="words"
-          textContentType="familyName"
-        />
-        {!editedProfile.lastName?.trim() && <Text style={styles.requiredText}>* Required</Text>}
-        <Text style={styles.fieldLabel}>Zipcode</Text>
-        <TextInput
-          style={styles.textInput}
-          value={editedProfile.zipcode || ''}
-          onChangeText={(t) =>
-            setEditedProfile((p) => ({ ...p, zipcode: t.replace(/[^0-9]/g, '') }))
-          }
-          placeholder="5-Digit Zipcode"
-          keyboardType="numeric"
-          maxLength={5}
-          editable={!isSaving}
-          textContentType="postalCode"
-        />
-        {!editedProfile.zipcode?.trim() && <Text style={styles.requiredText}>* Required</Text>}
-        <View style={styles.switchContainer}>
-          <Text style={styles.switchLabel}>Notifications:</Text>
-          <Switch
-            value={editedProfile.enableNotifications ?? true}
-            onValueChange={(v) => setEditedProfile((p) => ({ ...p, enableNotifications: v }))}
-            disabled={isSaving}
-            trackColor={{ false: colors.Grey || '#424242', true: colors.GoldPrimary || '#FFD700' }}
-            thumbColor={colors.White || '#FFFFFF'}
+    // ✅ CHANGE: KeyboardAvoidingView ko yahan add kiya gaya hai
+    <KeyboardAvoidingView
+      style={styles.flexContainer}
+      behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
+      keyboardVerticalOffset={Platform.OS === 'ios' ? 64 : 0}>
+      <ScrollView
+        style={styles.scrollView}
+        contentContainerStyle={styles.scrollContent}
+        keyboardShouldPersistTaps="handled">
+        {/* Baaki content waisa hi hai */}
+        <View style={styles.userInfoContainer}>
+          {isInitialSetup && !profileJustCompleted && (
+            <Text style={styles.setupTitle}>Complete Your Profile</Text>
+          )}
+          <Avatar.Image
+            size={80}
+            source={{ uri: image?.uri || userProfile?.profilePictureUrl || DEFAULT_AVATAR }}
+            style={styles.avatar}
           />
-        </View>
-        <Button
-          mode="contained"
-          style={styles.saveButton}
-          onPress={handleSave}
-          loading={isSaving}
-          disabled={isSaving}>
-          {isSaving
-            ? 'Saving...'
-            : isInitialSetup && !profileJustCompleted
-              ? 'Save & View Profile'
-              : 'Save Changes'}
-        </Button>
-        {(!isInitialSetup || profileJustCompleted) && (
           <Button
-            mode="text"
-            style={styles.cancelButton}
-            onPress={() => {
-              setIsEditMode(false);
-              setProfileJustCompleted(false);
-              setImage(null);
-              setVideo(null);
-              if (userProfile)
-                setEditedProfile({
-                  firstName: userProfile.firstName || '',
-                  lastName: userProfile.lastName || '',
-                  zipcode: userProfile.zipcode || '',
-                  enableNotifications: userProfile.enableNotifications ?? true,
-                });
-            }}
-            disabled={isSaving}
-            textColor={colors.LightGrey || '#A0A0A0'}>
-            Cancel
+            icon="camera"
+            mode="outlined"
+            style={styles.mediaButton}
+            onPress={() => pickMediaFromLibrary('Images')}
+            disabled={isSaving}>
+            {image ? 'Change Pic' : userProfile?.profilePictureUrl ? 'Change Pic' : 'Upload'}
           </Button>
-        )}
-      </View>
-    </ScrollView>
+          {(isInitialSetup || !userProfile?.is_profile_complete) &&
+            !userProfile?.profilePictureUrl &&
+            !image && <Text style={styles.requiredText}>* Pic required</Text>}
+          <Divider style={styles.divider} />
+          <Text style={styles.fieldLabel}>Bio Video (Max {MAX_BIO_VIDEO_DURATION_SECONDS}s)</Text>
+          {video ? (
+            <Text
+              style={styles.videoSelectedText}
+              numberOfLines={1}
+              ellipsizeMode="middle">{`Selected: ${video.name}`}</Text>
+          ) : userProfile?.videoUrl ? (
+            <Text style={styles.videoSelectedText}>Current video uploaded</Text>
+          ) : (
+            <Text style={styles.videoSelectedText}>(No bio video)</Text>
+          )}
+          <View style={styles.mediaActionsRow}>
+            <Button
+              icon="record-circle-outline"
+              mode="outlined"
+              style={[styles.mediaButton, styles.flexButton]}
+              onPress={() => recordMediaWithCamera('Videos')}
+              disabled={isSaving}>
+              Record
+            </Button>
+            <Button
+              icon="video-image"
+              mode="outlined"
+              style={[styles.mediaButton, styles.flexButton]}
+              onPress={() => pickMediaFromLibrary('Videos')}
+              disabled={isSaving}>
+              {video ? 'Change Lib' : userProfile?.videoUrl ? 'Change Lib' : 'Upload'}
+            </Button>
+          </View>
+          {(isInitialSetup || !userProfile?.is_profile_complete) &&
+            !userProfile?.videoUrl &&
+            !video && <Text style={styles.requiredText}>* Bio video required</Text>}
+          <Divider style={styles.divider} />
+          <Text style={styles.fieldLabel}>First Name</Text>
+          <TextInput
+            style={styles.textInput}
+            value={editedProfile.firstName || ''}
+            onChangeText={(t) => setEditedProfile((p) => ({ ...p, firstName: t }))}
+            placeholder="First Name"
+            editable={!isSaving}
+            autoCapitalize="words"
+            textContentType="givenName"
+            placeholderTextColor={colors.LightGrey}
+          />
+          {!editedProfile.firstName?.trim() && <Text style={styles.requiredText}>* Required</Text>}
+          <Text style={styles.fieldLabel}>Last Name</Text>
+          <TextInput
+            style={styles.textInput}
+            value={editedProfile.lastName || ''}
+            onChangeText={(t) => setEditedProfile((p) => ({ ...p, lastName: t }))}
+            placeholder="Last Name"
+            editable={!isSaving}
+            autoCapitalize="words"
+            textContentType="familyName"
+            placeholderTextColor={colors.LightGrey}
+          />
+          {!editedProfile.lastName?.trim() && <Text style={styles.requiredText}>* Required</Text>}
+          <Text style={styles.fieldLabel}>Zipcode</Text>
+          <TextInput
+            style={styles.textInput}
+            value={editedProfile.zipcode || ''}
+            onChangeText={(t) =>
+              setEditedProfile((p) => ({ ...p, zipcode: t.replace(/[^0-9]/g, '') }))
+            }
+            placeholder="5-Digit Zipcode"
+            keyboardType="numeric"
+            maxLength={5}
+            editable={!isSaving}
+            textContentType="postalCode"
+            placeholderTextColor={colors.LightGrey}
+          />
+          {!editedProfile.zipcode?.trim() && <Text style={styles.requiredText}>* Required</Text>}
+          <View style={styles.switchContainer}>
+            <Text style={styles.switchLabel}>Notifications:</Text>
+            <Switch
+              value={editedProfile.enableNotifications ?? true}
+              onValueChange={(v) => setEditedProfile((p) => ({ ...p, enableNotifications: v }))}
+              disabled={isSaving}
+              trackColor={{
+                false: colors.Grey || '#424242',
+                true: colors.GoldPrimary || '#FFD700',
+              }}
+              thumbColor={colors.White || '#FFFFFF'}
+              // ✅ CHANGE: iOS par switch ka background color hatane ke liye
+              style={Platform.OS === 'ios' ? { backgroundColor: 'transparent' } : {}}
+            />
+          </View>
+          <Button
+            mode="contained"
+            style={styles.saveButton}
+            onPress={handleSave}
+            loading={isSaving}
+            disabled={isSaving}>
+            {isSaving
+              ? 'Saving...'
+              : isInitialSetup && !profileJustCompleted
+                ? 'Save & View Profile'
+                : 'Save Changes'}
+          </Button>
+          {(!isInitialSetup || profileJustCompleted) && (
+            <Button
+              mode="text"
+              style={styles.cancelButton}
+              onPress={() => {
+                setIsEditMode(false);
+                setProfileJustCompleted(false);
+                setImage(null);
+                setVideo(null);
+                if (userProfile)
+                  setEditedProfile({
+                    firstName: userProfile.firstName || '',
+                    lastName: userProfile.lastName || '',
+                    zipcode: userProfile.zipcode || '',
+                    enableNotifications: userProfile.enableNotifications ?? true,
+                  });
+              }}
+              disabled={isSaving}
+              textColor={colors.LightGrey || '#A0A0A0'}>
+              Cancel
+            </Button>
+          )}
+        </View>
+      </ScrollView>
+    </KeyboardAvoidingView>
   );
 
   const renderUserInfo = () => {
+    // ... (This function remains unchanged) ...
     if (!userProfile) {
       return (
         <View style={styles.loadingContainer}>
@@ -626,7 +645,8 @@ const Profile = () => {
                   isLooping={false}
                   onError={(errorMsg: string) => setVideoPlaybackError(`Could not play video.`)}
                   onLoad={(status) => {
-                    if ((status as AVPlaybackStatusSuccess).isLoaded) setVideoPlaybackError(null);
+                    if (((status as AVPlayback) - StatusSuccess).isLoaded)
+                      setVideoPlaybackError(null);
                   }}
                   onPlaybackStatusUpdate={(status) => {
                     if ((status as AVPlaybackStatusError).error)
@@ -671,7 +691,7 @@ const Profile = () => {
               style={styles.finishProfileButton}
               onPress={() => {
                 setProfileJustCompleted(false);
-                router.replace('/calendar');
+                router.replace('/(app)/calendar');
               }}>
               Finish
             </Button>
@@ -685,7 +705,7 @@ const Profile = () => {
             <Button
               style={styles.calendarButton}
               mode="contained"
-              onPress={() => router.push('/calendar')}>
+              onPress={() => router.push('/(app)/calendar')}>
               Go to Calendar
             </Button>
           )}
@@ -711,7 +731,6 @@ const Profile = () => {
       <SafeAreaView style={styles.container}>
         {isEditMode ? renderEditableUserInfo() : renderUserInfo()}
         {renderBuyTokensModal()}
-        {/* Naya popup render ho raha hai */}
         <BubblePopup
           visible={popupState.visible}
           type={popupState.type}
@@ -726,8 +745,17 @@ const Profile = () => {
 };
 
 const styles = StyleSheet.create({
-  // Purane styles...
-  container: { flex: 1, backgroundColor: colors.Background || '#121212' },
+  // ✅ CHANGE: Yeh naya style add kiya gaya hai
+  flexContainer: {
+    flex: 1,
+  },
+  // ✅ CHANGE: paddingTop ko platform ke hisab se set kiya gaya hai
+  container: {
+    flex: 1,
+    backgroundColor: colors.Background || '#121212',
+    paddingTop: Platform.OS === 'android' ? RNStatusBar.currentHeight : 0,
+  },
+  // Baaki sabhi styles waisay hi hain...
   loadingContainer: {
     flex: 1,
     justifyContent: 'center',
@@ -981,8 +1009,6 @@ const styles = StyleSheet.create({
   },
   modalButton: { flex: 1, marginHorizontal: 10, paddingVertical: 6, borderRadius: 20 },
   modalConfirmButton: { backgroundColor: colors.GoldPrimary || '#FFD700' },
-
-  // --- NAYE BUBBLE POPUP KE STYLES ---
   overlay: {
     flex: 1,
     backgroundColor: 'rgba(0, 0, 0, 0.7)',
@@ -990,11 +1016,7 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     paddingHorizontal: 20,
   },
-  popupContainer: {
-    alignItems: 'center',
-    width: '100%',
-    maxWidth: 350,
-  },
+  popupContainer: { alignItems: 'center', width: '100%', maxWidth: 350 },
   popupImage: {
     width: 220,
     height: 220,

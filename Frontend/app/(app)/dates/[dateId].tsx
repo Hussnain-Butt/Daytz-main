@@ -1,5 +1,5 @@
 // File: app/(app)/dates/[dateId].tsx
-// ✅ COMPLETE AND FINAL UPDATED CODE (WITH CORRECT PROFILE DISPLAY LOGIC)
+// ✅ COMPLETE AND FINAL UPDATED CODE (WITH THEME-MATCHING RESCHEDULE MODAL)
 
 import React, { useState, useEffect, useCallback, useRef } from 'react';
 import {
@@ -38,20 +38,22 @@ const BRAND_LOGO = require('../../../assets/brand.png');
 const calcHappyIcon = require('../../../assets/calc-happy.png');
 const calcErrorIcon = require('../../../assets/calc-error.png');
 
-// Styles
+// ✅ UPDATED: Screen colors now reflect a consistent theme for the modal
 const screenColors = {
   background: '#121212',
   textPrimary: '#FFFFFF',
   textSecondary: '#EBEBF599',
   cardBackground: '#1C1C1E',
+  inputBackground: '#3F3F3F',
+  inputBorder: '#555555',
   acceptButton: '#28a745',
   declineButton: '#dc3545',
-  rescheduleButton: '#007bff',
-  cancelModalButton: '#d9534f',
-  submitModalButton: '#007bff',
+  rescheduleButton: '#FFD700', // Gold color for reschedule
+  cancelModalButton: '#4A4A4A', // Neutral grey for cancel
+  submitModalButton: '#ff149d', // Primary pink for submit
   buttonText: '#FFFFFF',
   avatarBorder: '#A020F0',
-  PinkPrimary: '#FF6B6B',
+  PinkPrimary: '#ff149d',
   GoldPrimary: '#FFD700',
   Black: '#000000',
   White: '#FFFFFF',
@@ -82,7 +84,7 @@ const BubblePopup = ({ visible, type, title, message, buttonText, onClose }) => 
   );
 };
 
-// Reschedule Modal Component
+// ✅ UPDATED: Reschedule Modal Component now uses the new color scheme from styles
 const RescheduleModal = ({ visible, onClose, onSubmit, currentDateDetails }) => {
   const [newDate, setNewDate] = useState(
     currentDateDetails.date && isValid(parseISO(currentDateDetails.date))
@@ -128,7 +130,7 @@ const RescheduleModal = ({ visible, onClose, onSubmit, currentDateDetails }) => 
             placeholder="Date (YYYY-MM-DD)"
             value={newDate}
             onChangeText={setNewDate}
-            placeholderTextColor="#888"
+            placeholderTextColor={screenColors.textSecondary}
             keyboardType="numeric"
           />
           <TextInput
@@ -136,7 +138,7 @@ const RescheduleModal = ({ visible, onClose, onSubmit, currentDateDetails }) => 
             placeholder="Time (HH:mm)"
             value={newTime}
             onChangeText={setNewTime}
-            placeholderTextColor="#888"
+            placeholderTextColor={screenColors.textSecondary}
             keyboardType="numeric"
           />
           <TextInput
@@ -144,7 +146,7 @@ const RescheduleModal = ({ visible, onClose, onSubmit, currentDateDetails }) => 
             placeholder="Venue"
             value={newVenue}
             onChangeText={setNewVenue}
-            placeholderTextColor="#888"
+            placeholderTextColor={screenColors.textSecondary}
           />
           <View style={styles.modalButtonContainer}>
             <TouchableOpacity
@@ -356,12 +358,9 @@ const DateDetailScreen = () => {
     );
   }
 
-  // ✅ THIS IS THE FIX: Determine which user to display
-  // Yeh check karega ke logged-in user kon hai aur doosre user ki details 'displayUser' mein daal dega.
   const displayUser =
     auth0User.sub === dateDetails.userFrom.userId ? dateDetails.userTo : dateDetails.userFrom;
 
-  // The bio video will always be from the proposer (userFrom), as per backend response structure.
   const videoProposingUser = dateDetails.userFrom;
 
   return (
@@ -375,10 +374,8 @@ const DateDetailScreen = () => {
           <View style={{ width: 40 }} />
         </View>
 
-        {/* ✅ FIX: Title ab 'Date with [Other User's Name]' dikhayega */}
         <Text style={styles.title}>Date with {displayUser.firstName || 'User'}</Text>
 
-        {/* ✅ FIX: Yahan 'displayUser' ki details use ho rahi hain */}
         <View style={styles.userInfoContainer}>
           <Avatar.Image
             size={64}
@@ -405,7 +402,6 @@ const DateDetailScreen = () => {
           <Text style={styles.detailValue}>{dateDetails.locationMetadata?.name || 'N/A'}</Text>
         </View>
 
-        {/* Bio video proposer (userFrom) ka hi rahega kyunke backend se usi ka URL aata hai */}
         {playableVideoUrl && (
           <View>
             <Text style={styles.videoLabel}>Bio Video from {videoProposingUser.firstName}</Text>
@@ -460,7 +456,6 @@ const DateDetailScreen = () => {
   );
 };
 
-// Styles (No changes from previous version)
 const styles = StyleSheet.create({
   container: { flex: 1, backgroundColor: screenColors.background },
   loadingContainer: {
@@ -632,8 +627,9 @@ const styles = StyleSheet.create({
     marginBottom: 25,
     textAlign: 'center',
   },
+  // ✅ UPDATED: Modal input styles now use theme colors
   modalInput: {
-    backgroundColor: '#333',
+    backgroundColor: screenColors.inputBackground,
     color: screenColors.textPrimary,
     borderRadius: 10,
     paddingVertical: 12,
@@ -641,7 +637,7 @@ const styles = StyleSheet.create({
     marginBottom: 15,
     fontSize: 16,
     borderWidth: 1,
-    borderColor: '#444',
+    borderColor: screenColors.inputBorder,
   },
   modalButtonContainer: { flexDirection: 'row', justifyContent: 'space-between', marginTop: 15 },
   modalButton: {
@@ -651,6 +647,7 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     marginHorizontal: 8,
   },
+  // ✅ UPDATED: Modal button styles now use theme colors
   cancelModalButton: { backgroundColor: screenColors.cancelModalButton },
   submitModalButton: { backgroundColor: screenColors.submitModalButton },
 });

@@ -1,7 +1,7 @@
 // File: types/Date.ts (Frontend)
 // ✅ COMPLETE AND FINAL CORRECTED CODE
 
-export type DateOutcome = 'amazing' | 'stood_up' | 'cancelled' | 'other';
+export type DateOutcome = 'amazing' | 'no_show_cancelled' | 'other';
 export type DateStatus = 'pending' | 'approved' | 'declined' | 'cancelled' | 'completed';
 
 export interface DetailedDateObject {

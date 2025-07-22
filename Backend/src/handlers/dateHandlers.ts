@@ -14,7 +14,60 @@ const notificationService = new NotificationService()
 
 console.log('[DateHandler] Services instantiated (Dates, Notification).')
 
-// ✅ MODIFIED: This handler now supports rescheduling.
+export const createDateHandler = asyncHandler(
+  async (req: CustomRequest, res: Response, next: NextFunction) => {
+    const proposerUserId = req.userId
+    const payload: CreateDatePayload = req.body
+    const { date, userTo, romanticRating, sexualRating, friendshipRating } = payload
+
+    if (!proposerUserId) return res.status(401).json({ message: 'Unauthorized.' })
+    if (!date || !userTo) return res.status(400).json({ message: 'Date and userTo are required.' })
+
+    // Ratings ko optional nahi rehne dena, 0 default value hai
+    if (
+      typeof romanticRating !== 'number' ||
+      typeof sexualRating !== 'number' ||
+      typeof friendshipRating !== 'number'
+    ) {
+      return res.status(400).json({ message: 'Valid attraction ratings are required.' })
+    }
+
+    if (proposerUserId === userTo)
+      return res.status(400).json({ message: 'Cannot propose a date to yourself.' })
+    if (!/^\d{4}-\d{2}-\d{2}$/.test(date))
+      return res.status(400).json({ message: 'Invalid date format. Use YYYY-MM-DD.' })
+
+    const existingDate = await datesService.getDateEntryByUsersAndDate(proposerUserId, userTo, date)
+    if (
+      existingDate &&
+      existingDate.status !== 'cancelled' &&
+      existingDate.status !== 'completed'
+    ) {
+      return res
+        .status(409)
+        .json({ message: 'An active or pending date already exists for this day.', existingDate })
+    }
+
+    try {
+      // createFullDateProposal ko poora payload pass karein
+      const createdDate = await datesService.createFullDateProposal(proposerUserId, payload)
+      // Notification ab service ke andar se bheja ja raha hai, yahan se call remove kar dein.
+      return res.status(201).json(createdDate)
+    } catch (error: any) {
+      console.error('[CreateDateHandler] Error during full proposal creation:', error.message)
+      // ✅✅✅ CHANGE: Specific error handling for no match ✅✅✅
+      if (error.code === 'NOT_A_MATCH') {
+        return res.status(409).json({ message: "It's not a match. Date proposal was not sent." })
+      }
+      if (error.code === 'INSUFFICIENT_FUNDS')
+        return res.status(402).json({ message: 'Insufficient tokens to express attraction.' })
+      if (error.message.includes('unique constraint'))
+        return res.status(409).json({ message: 'A conflict occurred. Please try again.' })
+      next(error)
+    }
+  },
+)
+
 export const updateDateHandler = asyncHandler(
   async (req: CustomRequest, res: Response, next: NextFunction) => {
     const updaterUserId = req.userId
@@ -72,10 +125,6 @@ export const updateDateHandler = asyncHandler(
         if (time) updatePayload.time = time
         if (locationMetadata) updatePayload.locationMetadata = locationMetadata
 
-        // Optional: When a date is rescheduled, you might want to reset its approval status
-        // updatePayload.status = 'pending';
-        // updatePayload.userToApproved = false;
-
         notificationAction = 'RESCHEDULE'
       } else {
         return res.status(400).json({ message: 'No valid update data provided.' })
@@ -110,7 +159,6 @@ export const updateDateHandler = asyncHandler(
   },
 )
 
-// ✅ MODIFIED: Added notification logic.
 export const cancelDateHandler = asyncHandler(
   async (req: CustomRequest, res: Response, next: NextFunction) => {
     const cancellerUserId = req.userId
@@ -137,7 +185,6 @@ export const cancelDateHandler = asyncHandler(
           .json({ message: 'Forbidden. You are not a participant in this date.' })
       }
 
-      // Check if date is in a cancellable state
       if (dateEntry.status === 'cancelled' || dateEntry.status === 'completed') {
         return res
           .status(400)
@@ -148,7 +195,6 @@ export const cancelDateHandler = asyncHandler(
         status: 'cancelled',
       })
 
-      // ✅ Send notification to the other user
       const otherUserId =
         dateEntry.userFrom === cancellerUserId ? dateEntry.userTo : dateEntry.userFrom
       if (otherUserId) {
@@ -167,8 +213,6 @@ export const cancelDateHandler = asyncHandler(
   },
 )
 
-// --- NO CHANGES TO THE HANDLERS BELOW ---
-
 export const addDateFeedbackHandler = asyncHandler(
   async (req: CustomRequest, res: Response, next: NextFunction) => {
     const userId = req.userId
@@ -178,7 +222,7 @@ export const addDateFeedbackHandler = asyncHandler(
     if (!userId) return res.status(401).json({ message: 'Unauthorized.' })
     if (isNaN(dateId)) return res.status(400).json({ message: 'Valid numeric dateId is required.' })
 
-    const validOutcomes: DateOutcome[] = ['amazing', 'stood_up', 'cancelled', 'other']
+    const validOutcomes: DateOutcome[] = ['amazing', 'no_show_cancelled', 'other']
     if (!outcome || !validOutcomes.includes(outcome)) {
       return res.status(400).json({ message: 'A valid outcome is required.' })
     }
@@ -210,69 +254,6 @@ export const addDateFeedbackHandler = asyncHandler(
       const feedbackResponse = humps.camelizeKeys(rows[0])
       res.status(201).json(feedbackResponse)
     } catch (error) {
-      next(error)
-    }
-  },
-)
-
-export const createDateHandler = asyncHandler(
-  async (req: CustomRequest, res: Response, next: NextFunction) => {
-    const proposerUserId = req.userId
-    const payload: CreateDatePayload = req.body
-    const { date, userTo, romanticRating, sexualRating, friendshipRating } = payload
-
-    if (!proposerUserId) return res.status(401).json({ message: 'Unauthorized.' })
-    if (!date || !userTo) return res.status(400).json({ message: 'Date and userTo are required.' })
-    if (
-      typeof romanticRating !== 'number' ||
-      typeof sexualRating !== 'number' ||
-      typeof friendshipRating !== 'number'
-    ) {
-      return res.status(400).json({ message: 'Valid attraction ratings are required.' })
-    }
-    if (proposerUserId === userTo)
-      return res.status(400).json({ message: 'Cannot propose a date to yourself.' })
-    if (!/^\d{4}-\d{2}-\d{2}$/.test(date))
-      return res.status(400).json({ message: 'Invalid date format. Use YYYY-MM-DD.' })
-
-    const existingDate = await datesService.getDateEntryByUsersAndDate(proposerUserId, userTo, date)
-    if (
-      existingDate &&
-      existingDate.status !== 'cancelled' &&
-      existingDate.status !== 'completed'
-    ) {
-      return res
-        .status(409)
-        .json({ message: 'An active or pending date already exists for this day.', existingDate })
-    }
-
-    try {
-      const createdDate = await datesService.createFullDateProposal(proposerUserId, payload)
-      try {
-        await notificationService.sendDateProposalNotification(
-          proposerUserId,
-          userTo,
-          {
-            dateId: createdDate.dateId,
-            date: createdDate.date,
-            time: createdDate.time || '',
-            venue: createdDate.locationMetadata?.name || 'A new spot!',
-          },
-          { romanticRating, sexualRating, friendshipRating },
-        )
-      } catch (notificationError: any) {
-        console.error(
-          '[CreateDateHandler] Failed to send notification, but proposal was created:',
-          notificationError.message,
-        )
-      }
-      return res.status(201).json(createdDate)
-    } catch (error: any) {
-      console.error('[CreateDateHandler] Error during full proposal creation:', error.message)
-      if (error.code === 'INSUFFICIENT_FUNDS')
-        return res.status(402).json({ message: 'Insufficient tokens to express attraction.' })
-      if (error.message.includes('unique constraint'))
-        return res.status(409).json({ message: 'A conflict occurred. Please try again.' })
       next(error)
     }
   },

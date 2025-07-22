@@ -1,5 +1,5 @@
 // File: app/(app)/notifications.tsx
-// ✅ Syntax error fixed. Icon size is 50x50 and logic is correct.
+// ✅ COMPLETE AND FINAL UPDATED CODE
 
 import React, { useState, useEffect, useCallback } from 'react';
 import {
@@ -55,12 +55,10 @@ const BubblePopup = ({ visible, type, title, message, buttonText, onClose }) => 
 };
 // --- END OF BUBBLE POPUP COMPONENT ---
 
-// ✅ Correct logic: Show error icon ONLY for declined dates.
 const getNotificationIcon = (notificationType: string) => {
-  if (notificationType === 'DATE_DECLINED') {
+  if (notificationType === 'DATE_DECLINED' || notificationType === 'DATE_CANCELLED') {
     return calcErrorIcon;
   }
-  // Show happy icon for all other notification types.
   return calcHappyIcon;
 };
 
@@ -134,10 +132,22 @@ export default function NotificationsScreen() {
 
   const handleNotificationPress = (item: Notification) => {
     console.log('Notification pressed:', item);
-    if (
+
+    // ✅✅✅ FIX: Story redirection logic updated ✅✅✅
+    if (item.type === 'ATTRACTION_PROPOSAL' && item.related_entity_id && item.proposing_user_id) {
+      router.push({
+        pathname: '/(app)/stories',
+        params: {
+          date: item.related_entity_id, // Story ki date
+          initialUserId: item.proposing_user_id, // Kiski story dikhani hai
+        },
+      });
+    } else if (
       (item.type === 'DATE_PROPOSAL' ||
         item.type === 'DATE_APPROVED' ||
-        item.type === 'DATE_DECLINED') &&
+        item.type === 'DATE_DECLINED' ||
+        item.type === 'DATE_RESCHEDULED' ||
+        item.type === 'DATE_CANCELLED') &&
       item.related_entity_id
     ) {
       router.push(`/(app)/dates/${item.related_entity_id}`);
@@ -229,13 +239,7 @@ const styles = StyleSheet.create({
     paddingVertical: 15,
     backgroundColor: colors.Background || '#121212',
   },
-  // ✅ Icon size increased
-  notificationIcon: {
-    width: 50,
-    height: 50,
-    resizeMode: 'contain',
-    marginRight: 15,
-  },
+  notificationIcon: { width: 50, height: 50, resizeMode: 'contain', marginRight: 15 },
   unreadItem: { backgroundColor: colors.DarkGrey || '#1E1E1E' },
   notificationContent: { flex: 1 },
   notificationMessage: { fontSize: 16, color: colors.White || '#FFFFFF' },
@@ -247,7 +251,6 @@ const styles = StyleSheet.create({
     backgroundColor: colors.TealPrimary || '#00BCD4',
     marginLeft: 15,
   },
-  // ✅ Separator margin adjusted for the new icon size (20 + 50 + 15 = 85)
   separator: { height: 1, backgroundColor: colors.DarkGrey || '#333', marginLeft: 85 },
   emptyContainer: {
     flex: 1,
@@ -270,7 +273,6 @@ const styles = StyleSheet.create({
     marginTop: 10,
     lineHeight: 22,
   },
-  // --- BUBBLE POPUP STYLES (UNCHANGED) ---
   overlay: {
     flex: 1,
     backgroundColor: 'rgba(0, 0, 0, 0.7)',

@@ -54,19 +54,25 @@ class NotificationService {
     this.db = pool
   }
 
+  // ✅✅✅ FIX: Function updated to save proposing_user_id ✅✅✅
   private async createDbNotification(
-    userId: string,
+    userId: string, // Jise notification mil raha hai
     message: string,
     type: string,
     relatedEntityId: string | number | null,
+    proposingUserId: string | null = null, // Jo notification bhej raha hai
   ) {
     try {
-      const query = `INSERT INTO notifications (user_id, message, type, status, related_entity_id) VALUES ($1, $2, $3, 'unread', $4);`
+      const query = `
+        INSERT INTO notifications (user_id, message, type, status, related_entity_id, proposing_user_id) 
+        VALUES ($1, $2, $3, 'unread', $4, $5);
+      `
       await this.db.query(query, [
         userId,
         message,
         type,
         relatedEntityId ? String(relatedEntityId) : null,
+        proposingUserId,
       ])
     } catch (error) {
       console.error(`[DB Notification] Failed to store notification for user ${userId}:`, error)
@@ -111,6 +117,37 @@ class NotificationService {
     }
   }
 
+  async sendAttractionProposalNotification(
+    senderUserId: string,
+    receiverUserId: string,
+    storyDate: string,
+  ) {
+    const senderProfile = await this.getUserProfile(senderUserId)
+    if (!senderProfile) return
+
+    const senderName = `${senderProfile.firstName || 'Someone'}`.trim()
+    const body = `${senderName} is interested in your story! Tap to see who.`
+    const type = 'ATTRACTION_PROPOSAL'
+
+    // ✅✅✅ FIX: createDbNotification ko sender ki ID bhi pass karein ✅✅✅
+    await this.createDbNotification(receiverUserId, body, type, storyDate, senderUserId)
+
+    const token = await this.getFcmToken(receiverUserId)
+    if (token) {
+      await this.sendFcmNotification(
+        token,
+        "Someone's interested! 👀",
+        body,
+        senderProfile.profilePictureUrl,
+        {
+          type,
+          storyDate: storyDate,
+          senderUserId: senderUserId, // Sender ki ID
+        },
+      )
+    }
+  }
+
   async sendDateProposalNotification(
     senderUserId: string,
     receiverUserId: string,
@@ -125,7 +162,8 @@ class NotificationService {
     const body = `${senderName} proposed a date at ${dateDetails.venue}. Tap to see details!`
     const type = 'DATE_PROPOSAL'
 
-    await this.createDbNotification(receiverUserId, body, type, dateDetails.dateId)
+    await this.createDbNotification(receiverUserId, body, type, dateDetails.dateId, senderUserId)
+
     const token = await this.getFcmToken(receiverUserId)
     if (token) {
       await this.sendFcmNotification(
@@ -149,7 +187,7 @@ class NotificationService {
     const toName = `${userToProfile.firstName || ''}`.trim() || 'Someone'
 
     const messageToUserFrom = `It's a Match with ${toName}! 💖`
-    await this.createDbNotification(userFromId, messageToUserFrom, 'MATCH', userToId)
+    await this.createDbNotification(userFromId, messageToUserFrom, 'MATCH', userToId, userToId)
     const tokenFrom = await this.getFcmToken(userFromId)
     if (tokenFrom) {
       await this.sendFcmNotification(
@@ -162,7 +200,7 @@ class NotificationService {
     }
 
     const messageToUserTo = `It's a Match with ${fromName}! 💖`
-    await this.createDbNotification(userToId, messageToUserTo, 'MATCH', userFromId)
+    await this.createDbNotification(userToId, messageToUserTo, 'MATCH', userFromId, userFromId)
     const tokenTo = await this.getFcmToken(userToId)
     if (tokenTo) {
       await this.sendFcmNotification(
@@ -190,7 +228,7 @@ class NotificationService {
     const body = `${responderName} has ${actionText} your date proposal.`
     const type = `DATE_${responseType === 'ACCEPTED' ? 'APPROVED' : 'DECLINED'}`
 
-    await this.createDbNotification(receiverUserId, body, type, dateId)
+    await this.createDbNotification(receiverUserId, body, type, dateId, responderUserId)
     const token = await this.getFcmToken(receiverUserId)
     if (token) {
       await this.sendFcmNotification(token, title, body, responderProfile.profilePictureUrl, {
@@ -200,7 +238,6 @@ class NotificationService {
     }
   }
 
-  // ✅ NEW: Reschedule ke liye notification
   async sendDateRescheduledNotification(
     updaterUserId: string,
     receiverUserId: string,
@@ -213,7 +250,7 @@ class NotificationService {
     const body = `${updaterName} has rescheduled your date. Tap to see the new details.`
     const type = 'DATE_RESCHEDULED'
 
-    await this.createDbNotification(receiverUserId, body, type, dateId)
+    await this.createDbNotification(receiverUserId, body, type, dateId, updaterUserId)
     const token = await this.getFcmToken(receiverUserId)
     if (token) {
       await this.sendFcmNotification(
@@ -226,7 +263,6 @@ class NotificationService {
     }
   }
 
-  // ✅ NEW: Cancel ke liye notification
   async sendDateCancelledNotification(
     cancellerUserId: string,
     receiverUserId: string,
@@ -239,7 +275,7 @@ class NotificationService {
     const body = `${cancellerName} has cancelled your upcoming date.`
     const type = 'DATE_CANCELLED'
 
-    await this.createDbNotification(receiverUserId, body, type, dateId)
+    await this.createDbNotification(receiverUserId, body, type, dateId, cancellerUserId)
     const token = await this.getFcmToken(receiverUserId)
     if (token) {
       await this.sendFcmNotification(

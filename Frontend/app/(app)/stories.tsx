@@ -176,7 +176,6 @@ const styles = StyleSheet.create({
     borderRadius: 2,
   },
   bottomSheetContentContainer: { flex: 1 },
-  // --- NAYE BUBBLE POPUP KE STYLES ---
   overlay: {
     flex: 1,
     backgroundColor: 'rgba(0, 0, 0, 0.7)',
@@ -184,18 +183,8 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     paddingHorizontal: 20,
   },
-  popupContainer: {
-    alignItems: 'center',
-    width: '100%',
-    maxWidth: 350,
-  },
-  popupImage: {
-    width: 220,
-    height: 220,
-    resizeMode: 'contain',
-    zIndex: 1,
-    marginBottom: -80,
-  },
+  popupContainer: { alignItems: 'center', width: '100%', maxWidth: 350 },
+  popupImage: { width: 220, height: 220, resizeMode: 'contain', zIndex: 1, marginBottom: -80 },
   bubble: {
     width: '90%',
     backgroundColor: '#FFFFFF',
@@ -229,22 +218,10 @@ const styles = StyleSheet.create({
     paddingHorizontal: 40,
     alignItems: 'center',
   },
-  errorButton: {
-    backgroundColor: colors.PinkPrimary || '#FF6B6B',
-  },
-  successButton: {
-    backgroundColor: colors.GoldPrimary || '#FFD700',
-  },
-  errorButtonText: {
-    color: colors.White || '#FFFFFF',
-    fontSize: 15,
-    fontWeight: 'bold',
-  },
-  successButtonText: {
-    color: colors.Black || '#000000',
-    fontSize: 15,
-    fontWeight: 'bold',
-  },
+  errorButton: { backgroundColor: colors.PinkPrimary || '#FF6B6B' },
+  successButton: { backgroundColor: colors.GoldPrimary || '#FFD700' },
+  errorButtonText: { color: colors.White || '#FFFFFF', fontSize: 15, fontWeight: 'bold' },
+  successButtonText: { color: colors.Black || '#000000', fontSize: 15, fontWeight: 'bold' },
 });
 
 // --- NEW BUBBLE POPUP COMPONENT ---
@@ -252,7 +229,6 @@ const BubblePopup = ({ visible, type, title, message, buttonText, onClose }) => 
   if (!visible) {
     return null;
   }
-
   const isSuccess = type === 'success';
   const imageSource = isSuccess ? calcHappyIcon : calcErrorIcon;
   const buttonStyle = isSuccess ? styles.successButton : styles.errorButton;
@@ -280,7 +256,6 @@ const BubblePopup = ({ visible, type, title, message, buttonText, onClose }) => 
 const StoryProgressBars: React.FC<StoryProgressBarsProps> = React.memo(
   ({ storiesCount, currentStoryIndex, currentVideoProgress, onBarPress }) => {
     if (storiesCount <= 1) return null;
-
     return (
       <View style={styles.progressBarsContainer}>
         {Array.from({ length: storiesCount }).map((_, index) => {
@@ -289,11 +264,8 @@ const StoryProgressBars: React.FC<StoryProgressBarsProps> = React.memo(
               index === currentStoryIndex
                 ? Math.max(0, Math.min(1, currentVideoProgress.value)) * 100
                 : 0;
-            return {
-              width: withTiming(`${widthPercentage}%`, { duration: 50 }),
-            };
+            return { width: withTiming(`${widthPercentage}%`, { duration: 50 }) };
           });
-
           return (
             <TouchableOpacity
               key={`progress-${index}`}
@@ -338,24 +310,6 @@ const StoryPage = React.memo(
     onNavigateBack,
     onNavigateToAttraction,
     onBlockUser,
-  }: {
-    item: StoryWithKey;
-    playableUrl: string | null | 'loading' | 'error';
-    videoLoadState: 'initial' | 'loading' | 'loaded' | 'error';
-    storiesCount: number;
-    currentIndex: number;
-    currentVideoProgress: Animated.SharedValue<number>;
-    videoRef: (ref: Video | null) => void;
-    onPlaybackStatusUpdate: (status: AVPlaybackStatus) => void;
-    onVideoLoadStart: () => void;
-    onVideoReady: () => void;
-    onVideoError: (error: string) => void;
-    onVideoTap: () => void;
-    onPresentModal: () => void;
-    onGoToStory: (index: number) => void;
-    onNavigateBack: () => void;
-    onNavigateToAttraction: () => void;
-    onBlockUser: () => void;
   }) => {
     const panGesture = Gesture.Pan()
       .activeOffsetY([-10, 10])
@@ -368,7 +322,6 @@ const StoryPage = React.memo(
           runOnJS(onPresentModal)();
         }
       });
-
     return (
       <GestureDetector gesture={panGesture}>
         <View style={styles.page}>
@@ -380,7 +333,7 @@ const StoryPage = React.memo(
                 source={{ uri: playableUrl }}
                 resizeMode={ResizeMode.COVER}
                 isLooping={storiesCount === 1}
-                shouldPlay={false} // Controlled by parent
+                shouldPlay={false}
                 isMuted={false}
                 progressUpdateIntervalMillis={100}
                 onPlaybackStatusUpdate={onPlaybackStatusUpdate}
@@ -404,7 +357,6 @@ const StoryPage = React.memo(
               </View>
             )}
           </TouchableOpacity>
-
           <SafeAreaView style={styles.overlayContainer} pointerEvents="box-none">
             <View style={styles.header}>
               <StoryProgressBars
@@ -425,7 +377,8 @@ const StoryPage = React.memo(
                     style={styles.avatar}
                   />
                   <Text style={styles.userNameText} numberOfLines={1}>
-                    {item.userName || 'User'}
+                    {' '}
+                    {item.userName || 'User'}{' '}
                   </Text>
                 </TouchableOpacity>
                 <TouchableOpacity onPress={onNavigateBack} style={styles.closeButton}>
@@ -433,9 +386,7 @@ const StoryPage = React.memo(
                 </TouchableOpacity>
               </View>
             </View>
-
             <View style={{ flex: 1 }} pointerEvents="none" />
-
             <View style={styles.footer}>
               <View style={styles.actionsContainer}>
                 <TouchableOpacity onPress={onNavigateToAttraction} style={styles.actionButton}>
@@ -458,9 +409,11 @@ const StoryPage = React.memo(
 export default function StoriesScreen() {
   const router = useRouter();
   const { auth0User: authUser, isLoading: authContextLoading } = useAuth();
-  const params = useLocalSearchParams<{ date?: string }>();
-  const date = params.date;
-  const storyDate = params.date;
+
+  // ✅✅✅ FIX: `initialUserId` ko yahan receive karein ✅✅✅
+  const params = useLocalSearchParams<{ date?: string; initialUserId?: string }>();
+  const { date, initialUserId } = params;
+  const storyDate = date;
 
   const [stories, setStories] = useState<StoryWithKey[]>([]);
   const [loading, setLoading] = useState(true);
@@ -469,26 +422,16 @@ export default function StoriesScreen() {
   const [playableUrls, setPlayableUrls] = useState<PlayableUrlMap>({});
   const [videoLoadStates, setVideoLoadStates] = useState<VideoLoadStateMap>({});
   const [isScreenFocused, setIsScreenFocused] = useState(true);
-
-  // =====> CUSTOM POPUP KE LIYE STATE <=====
   const [popupState, setPopupState] = useState({
     visible: false,
     type: 'error' as 'success' | 'error',
     title: '',
     message: '',
   });
-  // ======================================
 
-  // =====> CUSTOM POPUP DIKHANE KE LIYE HELPER FUNCTION <=====
   const showPopup = (title: string, message: string, type: 'success' | 'error' = 'error') => {
-    setPopupState({
-      visible: true,
-      title,
-      message,
-      type,
-    });
+    setPopupState({ visible: true, title, message, type });
   };
-  // ========================================================
 
   const isNavigatingAway = useRef(false);
   const isSwiping = useRef(false);
@@ -515,6 +458,7 @@ export default function StoriesScreen() {
     setError(`Failed to ${context}. Please try again.`);
   }, []);
 
+  // ✅✅✅ FIX: Yeh useEffect ab initialUserId ko handle karega ✅✅✅
   useEffect(() => {
     if (!date) {
       handleApiError('Date parameter is missing.', 'initialization');
@@ -539,11 +483,30 @@ export default function StoriesScreen() {
           userName: story.userName || 'User',
           uniqueStoryId: story.calendarId?.toString() ?? `generated-${date}-${index}`,
         }));
-        setStories(storiesWithKeys);
+
+        if (initialUserId) {
+          const initialIndex = storiesWithKeys.findIndex((s) => s.userId === initialUserId);
+          if (initialIndex !== -1) {
+            console.log(`[Stories] Found initial user at index: ${initialIndex}`);
+            setStories(storiesWithKeys);
+            setTimeout(() => {
+              flatListRef.current?.scrollToIndex({ index: initialIndex, animated: false });
+              // onViewableItemsChanged se state update ho jayegi, lekin manually bhi kar sakte hain for safety
+              setCurrentIndex(initialIndex);
+            }, 100);
+          } else {
+            console.warn(
+              `[Stories] initialUserId ${initialUserId} not found in stories for date ${date}.`
+            );
+            setStories(storiesWithKeys);
+          }
+        } else {
+          setStories(storiesWithKeys);
+        }
       })
       .catch((e: any) => handleApiError(e, 'fetching stories'))
       .finally(() => setLoading(false));
-  }, [date, authUser, authContextLoading, handleApiError]);
+  }, [date, authUser, authContextLoading, handleApiError, initialUserId]);
 
   useEffect(() => {
     const fetchUrlForStory = async (storyIndex: number) => {
@@ -553,7 +516,6 @@ export default function StoriesScreen() {
       if (playableUrls[storyId]) return;
 
       setPlayableUrls((prev) => ({ ...prev, [storyId]: 'loading' }));
-
       const identifier = { calendarId: story.calendarId };
       try {
         const response = await getPlayableVideoUrl(identifier);
@@ -562,7 +524,6 @@ export default function StoriesScreen() {
         setPlayableUrls((prev) => ({ ...prev, [storyId]: 'error' }));
       }
     };
-
     if (stories.length > 0) {
       fetchUrlForStory(currentIndex);
       if (currentIndex + 1 < stories.length) fetchUrlForStory(currentIndex + 1);
@@ -572,7 +533,6 @@ export default function StoriesScreen() {
   const pauseAllVideos = useCallback(async () => {
     await Promise.all(Object.values(videoRefs.current).map((v) => v?.pauseAsync().catch(() => {})));
   }, []);
-
   const playCurrentVideo = useCallback(async () => {
     const storyId = stories[currentIndex]?.uniqueStoryId;
     if (storyId) videoRefs.current[storyId]?.playAsync().catch(() => {});
@@ -608,7 +568,6 @@ export default function StoriesScreen() {
     await pauseAllVideos();
     router.canGoBack() ? router.back() : router.replace('/calendar');
   }, [router, pauseAllVideos]);
-
   const navigateToAttraction = useCallback(
     async (targetUserToId: string) => {
       if (!storyDate) return showPopup('Error', 'Story date not found.', 'error');
@@ -622,7 +581,6 @@ export default function StoriesScreen() {
     },
     [storyDate, pauseAllVideos, router]
   );
-
   const blockUser = useCallback(
     (userId: string, userName?: string) => {
       Alert.alert('Block User', `Are you sure you want to block ${userName || 'this user'}?`, [
@@ -635,11 +593,9 @@ export default function StoriesScreen() {
             bottomSheetModalRef.current?.dismiss();
             setSelectedUserIdForModal(null);
             if (newStories.length === 0) return navigateBack();
-
             const oldStoryId = stories[currentIndex]?.uniqueStoryId;
             let newIndex = newStories.findIndex((s) => s.uniqueStoryId === oldStoryId);
             if (newIndex === -1) newIndex = Math.min(currentIndex, newStories.length - 1);
-
             setStories(newStories);
             setCurrentIndex(newIndex);
             flatListRef.current?.scrollToIndex({ index: newIndex, animated: false });
@@ -650,16 +606,13 @@ export default function StoriesScreen() {
     },
     [stories, currentIndex, pauseAllVideos, navigateBack]
   );
-
   const handlePresentModalPress = useCallback((userId: string) => {
     setSelectedUserIdForModal(userId);
     bottomSheetModalRef.current?.present();
   }, []);
-
   const handleSheetChanges = useCallback((index: number) => {
     if (index === -1) setSelectedUserIdForModal(null);
   }, []);
-
   const renderBackdrop = useCallback(
     (props: any) => (
       <BottomSheetBackdrop
@@ -679,7 +632,6 @@ export default function StoriesScreen() {
       currentVideoProgress.value = 0;
     }
   }).current;
-
   const goToStory = useCallback(
     (index: number) => {
       if (index < 0 || index >= stories.length || index === currentIndex) return;
@@ -692,7 +644,6 @@ export default function StoriesScreen() {
     },
     [stories, currentIndex]
   );
-
   const onVideoTap = useCallback(async (storyId: string) => {
     const video = videoRefs.current[storyId];
     if (!video) return;
@@ -825,7 +776,6 @@ export default function StoriesScreen() {
           )}
         </BottomSheetView>
       </BottomSheetModal>
-      {/* Naya popup render ho raha hai */}
       <BubblePopup
         visible={popupState.visible}
         type={popupState.type}

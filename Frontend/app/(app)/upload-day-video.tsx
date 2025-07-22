@@ -11,7 +11,9 @@ import {
   Platform,
   ScrollView,
   Image,
-  Modal, // Modal ko import kiya gaya hai popup ke liye
+  Modal,
+  // ✅ CHANGE: StatusBar ko import karein
+  StatusBar as RNStatusBar,
 } from 'react-native';
 import { useLocalSearchParams, useRouter } from 'expo-router';
 import * as ImagePicker from 'expo-image-picker';
@@ -29,25 +31,22 @@ const MAX_VIDEO_DURATION_MS = MAX_VIDEO_DURATION_SECONDS * 1000;
 const ERROR_IMAGE = require('../../assets/calc-error.png');
 const HAPPY_IMAGE = require('../../assets/calc-happy.png');
 
-// --- NEW BUBBLE POPUP COMPONENT (Updated Design for React Native) ---
+// --- NEW BUBBLE POPUP COMPONENT (UNCHANGED) ---
 const BubblePopup = ({ visible, type, title, message, buttonText, onClose }) => {
   if (!visible) {
     return null;
   }
-
   const isSuccess = type === 'success';
   const imageSource = isSuccess ? HAPPY_IMAGE : ERROR_IMAGE;
   const buttonStyle = isSuccess ? styles.successButton : styles.errorButton;
   const buttonTextStyle = isSuccess ? styles.successButtonText : styles.errorButtonText;
-  const bubbleBgColor = styles.bubbleLight; // Light white background
-
+  const bubbleBgColor = styles.bubbleLight;
   return (
     <Modal transparent visible={visible} animationType="fade" onRequestClose={onClose}>
       <View style={styles.overlay}>
         <View style={styles.popupContainer}>
           <Image source={imageSource} style={styles.popupImage} />
           <View style={[styles.bubble, bubbleBgColor]}>
-            {/* Pointer is removed for this centered layout */}
             <Text style={styles.popupTitle}>{title}</Text>
             <Text style={styles.popupMessage}>{message}</Text>
             <TouchableOpacity style={[styles.popupButton, buttonStyle]} onPress={onClose}>
@@ -59,7 +58,9 @@ const BubblePopup = ({ visible, type, title, message, buttonText, onClose }) => 
     </Modal>
   );
 };
+// --- END OF BUBBLE POPUP COMPONENT ---
 
+// ... (Baaki saara logic bilkul waisa hi hai, usay yahan se hata raha hoon)
 const UploadDayVideo = () => {
   const router = useRouter();
   const { date } = useLocalSearchParams<{ date: string }>();
@@ -69,17 +70,15 @@ const UploadDayVideo = () => {
   const [uploadProgress, setUploadProgress] = useState(0);
   const videoPlayerRef = useRef<Video>(null);
 
-  // --- UNIFIED POPUP STATE ---
   const [popupState, setPopupState] = useState({
     visible: false,
-    type: 'error',
+    type: 'error' as 'success' | 'error',
     title: '',
     message: '',
     buttonText: 'Got It',
     onClose: () => {},
   });
 
-  // Helper function to show popup
   const showPopup = (type, title, message, buttonText = 'Got It', onCloseCallback = null) => {
     setPopupState({
       visible: true,
@@ -341,7 +340,12 @@ const UploadDayVideo = () => {
 };
 
 const styles = StyleSheet.create({
-  safeArea: { flex: 1, backgroundColor: '#2D2D2D' },
+  // ✅ CHANGE: paddingTop ko Android ke liye add kiya gaya hai
+  safeArea: {
+    flex: 1,
+    backgroundColor: '#2D2D2D',
+    paddingTop: Platform.OS === 'android' ? RNStatusBar.currentHeight : 0,
+  },
   scrollContainer: { flexGrow: 1, justifyContent: 'center', alignItems: 'center' },
   container: {
     width: '100%',
@@ -425,24 +429,24 @@ const styles = StyleSheet.create({
     paddingHorizontal: 20,
   },
   popupContainer: {
-    alignItems: 'center', // Center align horizontally
+    alignItems: 'center',
     width: '100%',
     maxWidth: 350,
   },
   popupImage: {
-    width: 220, // Image ko aur bada kiya gaya hai
+    width: 220,
     height: 220,
     resizeMode: 'contain',
     zIndex: 1,
-    marginBottom: -80, // Image ko bubble ke upar overlap karne ke liye
+    marginBottom: -80,
   },
   bubble: {
     position: 'relative',
     borderRadius: 25,
     padding: 20,
-    paddingTop: 90, // Image ke overlap ke liye top padding
-    width: '90%', // Bubble ki width thodi kam ki gayi hai
-    alignItems: 'center', // Bubble ke content ko center align kiya gaya hai
+    paddingTop: 90,
+    width: '90%',
+    alignItems: 'center',
     shadowColor: '#000',
     shadowOffset: { width: 0, height: 4 },
     shadowOpacity: 0.5,
@@ -450,24 +454,21 @@ const styles = StyleSheet.create({
     elevation: 10,
   },
   bubbleLight: {
-    backgroundColor: '#FFFFFF', // Light white background
-  },
-  bubblePointer: {
-    // Pointer is removed for this centered layout
+    backgroundColor: '#FFFFFF',
   },
   popupTitle: {
     fontSize: 22,
     fontWeight: 'bold',
     color: '#000000',
     marginBottom: 8,
-    textAlign: 'center', // Text center aligned
+    textAlign: 'center',
   },
   popupMessage: {
     fontSize: 15,
     color: '#333333',
     marginBottom: 25,
     lineHeight: 22,
-    textAlign: 'center', // Text center aligned
+    textAlign: 'center',
   },
   popupButton: {
     borderRadius: 20,

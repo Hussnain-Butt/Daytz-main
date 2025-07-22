@@ -13,6 +13,7 @@ export const getMyNotificationsHandler = asyncHandler(async (req: CustomRequest,
   }
 
   try {
+    // ✅✅✅ FIX: Query updated to select proposing_user_id ✅✅✅
     const query = `
       SELECT 
         notification_id, 
@@ -21,7 +22,8 @@ export const getMyNotificationsHandler = asyncHandler(async (req: CustomRequest,
         type, 
         status, 
         related_entity_id, 
-        created_at 
+        created_at,
+        proposing_user_id -- Yeh column ab select ho raha hai
       FROM notifications 
       WHERE user_id = $1 
       ORDER BY created_at DESC;
@@ -58,7 +60,6 @@ export const markNotificationsAsReadHandler = asyncHandler(
   },
 )
 
-// ✅ NEW HANDLER TO FIX THE ERROR
 // Handler to get the count of unread notifications for the authenticated user
 export const getUnreadNotificationsCountHandler = asyncHandler(
   async (req: CustomRequest, res: Response) => {

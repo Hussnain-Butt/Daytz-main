@@ -8,11 +8,12 @@ import {
   TouchableOpacity,
   ScrollView,
   ActivityIndicator,
-  Alert, // Confirmation dialog ke liye rakha gaya hai
+  Alert,
   Image,
   StatusBar as RNStatusBar,
   Platform,
-  Modal, // BubblePopup ke liye import
+  Modal,
+  SafeAreaView,
 } from 'react-native';
 import Slider from '@react-native-community/slider';
 import { useRouter, useLocalSearchParams } from 'expo-router';
@@ -23,6 +24,7 @@ import {
   getUserById,
   isAuthTokenApiError,
   getAttractionByUserFromUserToAndDate,
+  createAttraction,
 } from '../../api/api';
 import { Attraction as AttractionResponse } from '../../types/Attraction';
 import { colors as themeColors } from '../../utils/theme';
@@ -37,12 +39,11 @@ const SEXUAL_ICON = require('../../assets/sexual.png');
 const FRIENDSHIP_ICON = require('../../assets/friendship.png');
 const TOKEN_ICON = require('../../assets/match.png');
 
-// =====> ALERT KI TASVEEREIN IMPORT KAREIN (PATH THEEK KAREIN) <=====
 const calcHappyIcon = require('../../assets/calc-happy.png');
 const calcErrorIcon = require('../../assets/calc-error.png');
-// =====================================================================
 
-// --- LABEL CONSTANTS ---
+// (Rest of the constants and components are the same)
+// ...
 const ROMANTIC_LABELS: Record<number, string> = {
   0: 'None',
   1: 'Dinner',
@@ -61,8 +62,6 @@ const FRIENDSHIP_LABELS: Record<number, string> = {
   2: "Let's hang!",
   3: 'New BFF',
 };
-
-// --- SCREEN COLORS ---
 const screenColors = {
   background: themeColors.Background || '#121212',
   cardBackground: 'transparent',
@@ -81,23 +80,15 @@ const screenColors = {
   borderColor: themeColors.DarkGrey || '#303030',
   tokenPillBackground: '#000000',
 };
-
-// --- CONSTANTS ---
-const MIN_RATING = 0;
-const MAX_RATING = 3;
-const RATING_STEP = 1;
-
-// --- NEW BUBBLE POPUP COMPONENT ---
+const MIN_RATING = 0,
+  MAX_RATING = 3,
+  RATING_STEP = 1;
 const BubblePopup = ({ visible, type, title, message, buttonText, onClose }) => {
-  if (!visible) {
-    return null;
-  }
-
+  if (!visible) return null;
   const isSuccess = type === 'success';
   const imageSource = isSuccess ? calcHappyIcon : calcErrorIcon;
   const buttonStyle = isSuccess ? styles.successButton : styles.errorButton;
   const buttonTextStyle = isSuccess ? styles.successButtonText : styles.errorButtonText;
-
   return (
     <Modal transparent visible={visible} animationType="fade" onRequestClose={onClose}>
       <View style={styles.overlay}>
@@ -115,8 +106,6 @@ const BubblePopup = ({ visible, type, title, message, buttonText, onClose }) => 
     </Modal>
   );
 };
-// --- END OF BUBBLE POPUP COMPONENT ---
-
 const getTypeOfAttraction = (r: number, s: number, f: number): string => {
   const interest = r + s + f;
   if (s === 0 && r === 0 && f === 0) return 'No Interest';
@@ -141,28 +130,24 @@ export default function AttractionScreen() {
     userToProfilePic?: string;
   }>();
 
-  const {
-    userToId,
-    date: storyDate,
-    userToName: paramUserToName,
-    userToProfilePic: paramUserToProfilePic,
-  } = params;
+  const { userToId, date: storyDate } = params;
   const { auth0User: authUser, logout } = useAuth();
   const { tokenBalance: storeTokenBalance, setTokenBalance: setStoreTokenBalance } = useUserStore();
 
   const [romanticRating, setRomanticRating] = useState(0);
   const [sexualRating, setSexualRating] = useState(0);
   const [friendshipRating, setFriendshipRating] = useState(0);
-  const [existingAttraction, setExistingAttraction] = useState<AttractionResponse | null>(null);
-  const [isLoadingBalance, setIsLoadingBalance] = useState(false);
-  const [isCheckingExisting, setIsCheckingExisting] = useState(true);
+  const [myExistingAttraction, setMyExistingAttraction] = useState<AttractionResponse | null>(null);
+
+  // ✅✅✅ CHANGE: Yeh state batayegi ke hum doosre user ki attraction ko respond kar rahe hain ya nahi
+  const [isRespondingToAttraction, setIsRespondingToAttraction] = useState(false);
+
+  const [isLoading, setIsLoading] = useState(true);
   const [targetUserDisplay, setTargetUserDisplay] = useState<{
     name: string;
     profilePictureUrl?: string | null;
   } | null>(null);
-  const [isLoadingTargetUser, setIsLoadingTargetUser] = useState(false);
-
-  // =====> CUSTOM POPUP KE LIYE STATE <=====
+  const [isSubmitting, setIsSubmitting] = useState(false);
   const [popupState, setPopupState] = useState({
     visible: false,
     type: 'error' as 'success' | 'error',
@@ -170,43 +155,24 @@ export default function AttractionScreen() {
     message: '',
     onCloseCallback: undefined as (() => void) | undefined,
   });
-  // ======================================
 
-  // =====> CUSTOM POPUP DIKHANE KE LIYE HELPER FUNCTION <=====
   const showPopup = (
     title: string,
     message: string,
     type: 'success' | 'error' = 'error',
     onCloseCallback?: () => void
   ) => {
-    setPopupState({
-      visible: true,
-      title,
-      message,
-      type,
-      onCloseCallback,
-    });
+    setPopupState({ visible: true, title, message, type, onCloseCallback });
   };
-  // ========================================================
-
-  useEffect(() => {
-    RNStatusBar.setBarStyle('light-content');
-    if (Platform.OS === 'android') {
-      RNStatusBar.setBackgroundColor(screenColors.headerBackground);
-    }
-  }, []);
 
   const refreshBalance = useCallback(async () => {
     if (!authUser) return;
-    setIsLoadingBalance(true);
     try {
       const response = await getUserTokenBalance();
       setStoreTokenBalance(response.data.tokenBalance);
     } catch (err: any) {
       if (isAuthTokenApiError(err))
         showPopup('Session Expired', 'Please log in again.', 'error', () => logout && logout());
-    } finally {
-      setIsLoadingBalance(false);
     }
   }, [authUser, logout, setStoreTokenBalance]);
 
@@ -217,43 +183,39 @@ export default function AttractionScreen() {
     }
     const fetchInitialData = async () => {
       if (!authUser?.sub) return;
-      setIsCheckingExisting(true);
-      setIsLoadingTargetUser(true);
+      setIsLoading(true);
 
-      try {
-        const response = await getUserById(userToId);
-        if (response.data) {
-          setTargetUserDisplay({
-            name:
-              `${response.data.firstName || ''} ${response.data.lastName || ''}`.trim() || 'User',
-            profilePictureUrl: response.data.profilePictureUrl,
-          });
-        } else {
-          setTargetUserDisplay({ name: 'User (Not Found)', profilePictureUrl: null });
-        }
-      } catch (e) {
-        setTargetUserDisplay({ name: 'User (Error)', profilePictureUrl: null });
-      } finally {
-        setIsLoadingTargetUser(false);
+      // Dono directions mein attraction check karein
+      const [myAttractionRes, theirAttractionRes, targetUserRes] = await Promise.all([
+        getAttractionByUserFromUserToAndDate(authUser.sub, userToId, storyDate).catch(() => null),
+        getAttractionByUserFromUserToAndDate(userToId, authUser.sub, storyDate).catch(() => null),
+        getUserById(userToId).catch(() => null),
+      ]);
+
+      if (targetUserRes?.data) {
+        setTargetUserDisplay({
+          name:
+            `${targetUserRes.data.firstName || ''} ${targetUserRes.data.lastName || ''}`.trim() ||
+            'User',
+          profilePictureUrl: targetUserRes.data.profilePictureUrl,
+        });
+      } else {
+        setTargetUserDisplay({ name: 'User Not Found', profilePictureUrl: null });
       }
 
-      try {
-        const attractionResponse = await getAttractionByUserFromUserToAndDate(
-          authUser.sub,
-          userToId,
-          storyDate
-        );
-        if (attractionResponse.data) {
-          setExistingAttraction(attractionResponse.data);
-          setRomanticRating(attractionResponse.data.romanticRating || 0);
-          setSexualRating(attractionResponse.data.sexualRating || 0);
-          setFriendshipRating(attractionResponse.data.friendshipRating || 0);
-        }
-      } catch (err) {
-        /* ... */
-      } finally {
-        setIsCheckingExisting(false);
+      if (myAttractionRes?.data) {
+        setMyExistingAttraction(myAttractionRes.data);
+        setRomanticRating(myAttractionRes.data.romanticRating || 0);
+        setSexualRating(myAttractionRes.data.sexualRating || 0);
+        setFriendshipRating(myAttractionRes.data.friendshipRating || 0);
       }
+
+      // ✅✅✅ CHANGE: Agar doosre user ki attraction hai, to state set karein
+      if (theirAttractionRes?.data) {
+        setIsRespondingToAttraction(true);
+      }
+
+      setIsLoading(false);
     };
     fetchInitialData();
   }, [userToId, storyDate, authUser?.sub]);
@@ -263,46 +225,70 @@ export default function AttractionScreen() {
   }, [authUser, storeTokenBalance, refreshBalance]);
 
   const totalTokenCost = useMemo(() => {
-    if (existingAttraction) return 0;
+    if (myExistingAttraction) return 0;
     return (romanticRating || 0) + (sexualRating || 0) + (friendshipRating || 0);
-  }, [romanticRating, sexualRating, friendshipRating, existingAttraction]);
+  }, [romanticRating, sexualRating, friendshipRating, myExistingAttraction]);
 
-  const attractionTypeDescription = useMemo(() => {
-    return getTypeOfAttraction(romanticRating, sexualRating, friendshipRating);
-  }, [romanticRating, sexualRating, friendshipRating]);
+  const attractionTypeDescription = useMemo(
+    () => getTypeOfAttraction(romanticRating, sexualRating, friendshipRating),
+    [romanticRating, sexualRating, friendshipRating]
+  );
 
   const canProceed = useMemo(() => {
-    if (existingAttraction) return true;
+    if (myExistingAttraction) return true;
     if (totalTokenCost === 0) return false;
     if (storeTokenBalance === null) return false;
     return storeTokenBalance >= totalTokenCost;
-  }, [storeTokenBalance, totalTokenCost, existingAttraction]);
+  }, [storeTokenBalance, totalTokenCost, myExistingAttraction]);
 
-  const handleProceedToPropose = () => {
-    if (!userToId || !storyDate) {
-      showPopup('Error', 'Cannot proceed, essential information is missing.', 'error');
-      return;
+  const handleValidation = () => {
+    if (!userToId || !storyDate || !authUser?.sub) {
+      showPopup('Error', 'Essential information is missing.', 'error');
+      return false;
     }
-    if (authUser?.sub === userToId) {
+    if (authUser.sub === userToId) {
       showPopup('Action Not Allowed', 'You cannot express attraction to yourself.', 'error');
-      return;
+      return false;
     }
     if (romanticRating === 0 && sexualRating === 0 && friendshipRating === 0) {
-      showPopup(
-        'No Rating Set',
-        'Please adjust at least one slider to express attraction.',
-        'error'
-      );
-      return;
+      showPopup('No Rating Set', 'Please adjust at least one slider.', 'error');
+      return false;
     }
-    if (!canProceed && !existingAttraction) {
-      Alert.alert(
-        'Insufficient Tokens',
-        `You need ${totalTokenCost} token(s). You can still set up the date, but you'll need more tokens to send the proposal.`,
-        [{ text: 'Continue Anyway' }, { text: 'Cancel', style: 'cancel' }]
-      );
+    if (!canProceed && !myExistingAttraction) {
+      showPopup('Insufficient Tokens', `You need ${totalTokenCost} token(s).`, 'error');
+      return false;
     }
+    return true;
+  };
 
+  // Flow 1: User B (Initiator) - Attraction submit karke calendar par jana
+  const handleExpressAttraction = async () => {
+    if (!handleValidation()) return;
+    setIsSubmitting(true);
+    try {
+      await createAttraction({
+        userTo: userToId,
+        date: storyDate,
+        romanticRating,
+        sexualRating,
+        friendshipRating,
+        isUpdate: !!myExistingAttraction,
+      });
+      await refreshBalance();
+      showPopup('Success!', 'Your attraction has been sent!', 'success', () =>
+        router.replace('/(app)/calendar')
+      );
+    } catch (error: any) {
+      const errorMessage = error.response?.data?.message || 'An unexpected error occurred.';
+      showPopup('Submission Failed', errorMessage, 'error');
+    } finally {
+      setIsSubmitting(false);
+    }
+  };
+
+  // Flow 2: User A (Responder) - Attraction set karke propose date par jana
+  const handleProceedToPropose = () => {
+    if (!handleValidation()) return;
     router.push({
       pathname: '/(app)/propose-date',
       params: {
@@ -313,7 +299,7 @@ export default function AttractionScreen() {
         romanticRating: String(romanticRating),
         sexualRating: String(sexualRating),
         friendshipRating: String(friendshipRating),
-        isUpdate: existingAttraction ? 'true' : 'false',
+        isUpdate: myExistingAttraction ? 'true' : 'false',
       },
     });
   };
@@ -342,7 +328,7 @@ export default function AttractionScreen() {
     },
   ];
 
-  if (isCheckingExisting || isLoadingTargetUser) {
+  if (isLoading) {
     return (
       <View style={[styles.container, styles.centered]}>
         <ActivityIndicator size="large" color={screenColors.primaryAccentYellow} />
@@ -353,127 +339,130 @@ export default function AttractionScreen() {
 
   return (
     <PaperProvider>
-      <View style={styles.container}>
-        <View style={styles.header}>
-          <TouchableOpacity onPress={() => router.back()} style={styles.headerBackButton}>
-            <View style={styles.backButtonCircle}>
-              <Image source={BACK_ARROW_ICON} style={styles.headerBackIcon} />
-            </View>
-            <Text style={styles.headerBackButtonText}>BACK</Text>
-          </TouchableOpacity>
-          <View style={styles.tokenDisplayContainer}>
-            <Image source={TOKEN_ICON} style={styles.tokenIcon} />
-            <Text style={styles.tokenTextValue}>
-              {storeTokenBalance !== null ? `${storeTokenBalance} coins` : '...'}
-            </Text>
-          </View>
-          <TouchableOpacity
-            onPress={() => router.replace('/(app)/calendar')}
-            style={styles.headerHomeButton}>
-            <Image source={HOME_ICON_SOLID} style={styles.headerHomeIcon} />
-          </TouchableOpacity>
-        </View>
-
-        <ScrollView contentContainerStyle={styles.scrollContentContainer}>
-          <Text style={styles.pageTitle}>
-            {existingAttraction ? 'Update Attraction To' : 'Express Attraction To'}
-          </Text>
-
-          {targetUserDisplay && (
-            <View style={styles.targetUserDisplay}>
-              <Image
-                source={{ uri: targetUserDisplay.profilePictureUrl }}
-                style={styles.targetUserImage}
-              />
-              <Text style={styles.targetUserName}>{targetUserDisplay.name}</Text>
-            </View>
-          )}
-          <Text style={styles.targetUserDate}>
-            For story on: {storyDate ? format(new Date(storyDate), 'MMMM do, yyyy') : ''}
-          </Text>
-
-          <View style={styles.slidersSection}>
-            {sliderData.map((item) => (
-              <View key={item.label} style={styles.sliderItemContainer}>
-                <Text style={styles.sliderItemMainLabel}>{item.label}</Text>
-                <View style={styles.sliderIconValueRow}>
-                  <Image source={item.icon} style={styles.sliderTypeIcon} />
-                  <Text
-                    style={
-                      item.value === 0
-                        ? styles.sliderItemValueLabelPlaceholder
-                        : styles.sliderItemValueLabel
-                    }>
-                    {item.labels[Math.round(item.value)] || ''}
-                  </Text>
-                </View>
-                <Slider
-                  style={styles.sliderControl}
-                  minimumValue={MIN_RATING}
-                  maximumValue={MAX_RATING}
-                  step={RATING_STEP}
-                  value={item.value}
-                  onValueChange={item.setter}
-                  minimumTrackTintColor={screenColors.sliderMinTrack}
-                  maximumTrackTintColor={screenColors.sliderMaxTrack}
-                  thumbTintColor={screenColors.sliderThumb}
-                />
+      <SafeAreaView style={styles.safeArea}>
+        <View style={styles.container}>
+          <View style={styles.header}>
+            <TouchableOpacity onPress={() => router.back()} style={styles.headerBackButton}>
+              <View style={styles.backButtonCircle}>
+                <Image source={BACK_ARROW_ICON} style={styles.headerBackIcon} />
               </View>
-            ))}
+              <Text style={styles.headerBackButtonText}>BACK</Text>
+            </TouchableOpacity>
+            <View style={styles.tokenDisplayContainer}>
+              <Image source={TOKEN_ICON} style={styles.tokenIcon} />
+              <Text style={styles.tokenTextValue}>
+                {storeTokenBalance !== null ? `${storeTokenBalance} coins` : '...'}
+              </Text>
+            </View>
+            <TouchableOpacity
+              onPress={() => router.replace('/(app)/calendar')}
+              style={styles.headerHomeButton}>
+              <Image source={HOME_ICON_SOLID} style={styles.headerHomeIcon} />
+            </TouchableOpacity>
           </View>
 
-          {(romanticRating > 0 || sexualRating > 0 || friendshipRating > 0) && (
-            <Text style={styles.attractionTypeResultText}>
-              Attraction Type: {attractionTypeDescription}
+          <ScrollView contentContainerStyle={styles.scrollContentContainer}>
+            <Text style={styles.pageTitle}>
+              {myExistingAttraction ? 'Update Attraction To' : 'Express Attraction To'}
             </Text>
-          )}
-
-          {!existingAttraction && (
-            <View style={styles.tokenCostDisplay}>
-              <Text style={styles.tokenCostLabelText}>Total Token Cost:</Text>
-              <Text style={styles.tokenCostValueText}>{totalTokenCost}</Text>
+            {targetUserDisplay && (
+              <View style={styles.targetUserDisplay}>
+                <Image
+                  source={{ uri: targetUserDisplay.profilePictureUrl }}
+                  style={styles.targetUserImage}
+                />
+                <Text style={styles.targetUserName}>{targetUserDisplay.name}</Text>
+              </View>
+            )}
+            <Text style={styles.targetUserDate}>
+              For story on: {storyDate ? format(new Date(storyDate), 'MMMM do, yyyy') : ''}
+            </Text>
+            <View style={styles.slidersSection}>
+              {sliderData.map((item) => (
+                <View key={item.label} style={styles.sliderItemContainer}>
+                  <Text style={styles.sliderItemMainLabel}>{item.label}</Text>
+                  <View style={styles.sliderIconValueRow}>
+                    <Image source={item.icon} style={styles.sliderTypeIcon} />
+                    <Text
+                      style={
+                        item.value === 0
+                          ? styles.sliderItemValueLabelPlaceholder
+                          : styles.sliderItemValueLabel
+                      }>
+                      {item.labels[Math.round(item.value)] || ''}
+                    </Text>
+                  </View>
+                  <Slider
+                    style={styles.sliderControl}
+                    minimumValue={MIN_RATING}
+                    maximumValue={MAX_RATING}
+                    step={RATING_STEP}
+                    value={item.value}
+                    onValueChange={item.setter}
+                    minimumTrackTintColor={screenColors.sliderMinTrack}
+                    maximumTrackTintColor={screenColors.sliderMaxTrack}
+                    thumbTintColor={screenColors.sliderThumb}
+                    disabled={isSubmitting}
+                  />
+                </View>
+              ))}
             </View>
-          )}
+            {(romanticRating > 0 || sexualRating > 0 || friendshipRating > 0) && (
+              <Text style={styles.attractionTypeResultText}>
+                Attraction Type: {attractionTypeDescription}
+              </Text>
+            )}
+            {!myExistingAttraction && (
+              <View style={styles.tokenCostDisplay}>
+                <Text style={styles.tokenCostLabelText}>Total Token Cost:</Text>
+                <Text style={styles.tokenCostValueText}>{totalTokenCost}</Text>
+              </View>
+            )}
 
-          <TouchableOpacity
-            style={[
-              styles.mainActionButton,
-              styles.submitActionButton,
-              totalTokenCost === 0 && !existingAttraction && styles.disabledActionButton,
-            ]}
-            onPress={handleProceedToPropose}
-            disabled={totalTokenCost === 0 && !existingAttraction}>
-            <Text style={[styles.mainActionButtonText, styles.submitActionButtonText]}>
-              {existingAttraction ? 'UPDATE & PROPOSE DATE' : 'PROCEED TO PROPOSE DATE'}
+            {/* ✅✅✅ CHANGE: BUTTON KA ACTION AUR TEXT AB CONDITIONAL HAI ✅✅✅ */}
+            <TouchableOpacity
+              style={[
+                styles.mainActionButton,
+                styles.submitActionButton,
+                (!canProceed || isSubmitting) && styles.disabledActionButton,
+              ]}
+              onPress={isRespondingToAttraction ? handleProceedToPropose : handleExpressAttraction}
+              disabled={!canProceed || isSubmitting}>
+              {isSubmitting ? (
+                <ActivityIndicator color={themeColors.Black || '#000'} />
+              ) : (
+                <Text style={[styles.mainActionButtonText, styles.submitActionButtonText]}>
+                  {isRespondingToAttraction ? 'PROPOSE DATE' : 'SUBMIT ATTRACTION'}
+                </Text>
+              )}
+            </TouchableOpacity>
+
+            <Text style={styles.explanatoryText}>
+              {isRespondingToAttraction
+                ? "They're already interested! Set your attraction and propose a date on the next screen."
+                : 'Set your attraction level. Tokens will be deducted immediately.'}
             </Text>
-          </TouchableOpacity>
-
-          <Text style={styles.explanatoryText}>
-            Set your attraction level. Tokens will be deducted when you send the date proposal on
-            the next screen.
-          </Text>
-        </ScrollView>
-      </View>
-      {/* Naya popup render ho raha hai */}
-      <BubblePopup
-        visible={popupState.visible}
-        type={popupState.type}
-        title={popupState.title}
-        message={popupState.message}
-        buttonText="OK"
-        onClose={() => {
-          const callback = popupState.onCloseCallback;
-          setPopupState({ ...popupState, visible: false, onCloseCallback: undefined });
-          if (callback) {
-            callback();
-          }
-        }}
-      />
+          </ScrollView>
+        </View>
+        <BubblePopup
+          visible={popupState.visible}
+          type={popupState.type}
+          title={popupState.title}
+          message={popupState.message}
+          buttonText="OK"
+          onClose={() => {
+            const callback = popupState.onCloseCallback;
+            setPopupState({ ...popupState, visible: false, onCloseCallback: undefined });
+            if (callback) callback();
+          }}
+        />
+      </SafeAreaView>
     </PaperProvider>
   );
 }
 
 const styles = StyleSheet.create({
+  safeArea: { flex: 1, backgroundColor: screenColors.background },
   container: {
     flex: 1,
     backgroundColor: screenColors.background,
@@ -605,8 +594,6 @@ const styles = StyleSheet.create({
     marginTop: 20,
     paddingHorizontal: 10,
   },
-
-  // --- NAYE BUBBLE POPUP KE STYLES ---
   overlay: {
     flex: 1,
     backgroundColor: 'rgba(0, 0, 0, 0.7)',
@@ -614,18 +601,8 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     paddingHorizontal: 20,
   },
-  popupContainer: {
-    alignItems: 'center',
-    width: '100%',
-    maxWidth: 350,
-  },
-  popupImage: {
-    width: 220,
-    height: 220,
-    resizeMode: 'contain',
-    zIndex: 1,
-    marginBottom: -80,
-  },
+  popupContainer: { alignItems: 'center', width: '100%', maxWidth: 350 },
+  popupImage: { width: 220, height: 220, resizeMode: 'contain', zIndex: 1, marginBottom: -80 },
   bubble: {
     width: '90%',
     backgroundColor: '#FFFFFF',
@@ -659,20 +636,8 @@ const styles = StyleSheet.create({
     paddingHorizontal: 40,
     alignItems: 'center',
   },
-  errorButton: {
-    backgroundColor: themeColors.PinkPrimary || '#FF6B6B',
-  },
-  successButton: {
-    backgroundColor: themeColors.GoldPrimary || '#FFD700',
-  },
-  errorButtonText: {
-    color: themeColors.White || '#FFFFFF',
-    fontSize: 15,
-    fontWeight: 'bold',
-  },
-  successButtonText: {
-    color: themeColors.Black || '#000000',
-    fontSize: 15,
-    fontWeight: 'bold',
-  },
+  errorButton: { backgroundColor: themeColors.PinkPrimary || '#FF6B6B' },
+  successButton: { backgroundColor: themeColors.GoldPrimary || '#FFD700' },
+  errorButtonText: { color: themeColors.White || '#FFFFFF', fontSize: 15, fontWeight: 'bold' },
+  successButtonText: { color: themeColors.Black || '#000000', fontSize: 15, fontWeight: 'bold' },
 });

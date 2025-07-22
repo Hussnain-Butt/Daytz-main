@@ -1,38 +1,37 @@
 // File: src/services/internal/AttractionService.ts
-// ✅ COMPLETE AND FINAL UPDATED CODE
+// ✅ COMPLETE AND FINAL CORRECTED CODE
 
-import AttractionRepository from '../../repository/AttractionRepository'
+// ✅✅✅ FIX: Path ko theek kiya gaya hai ('../' se '../../') ✅✅✅
+import pool from '../../db'
 import { Attraction, CreateAttractionInternalPayload } from '../../types/Attraction'
-import { PoolClient } from 'pg'
+import { Pool, PoolClient } from 'pg'
+import * as humps from 'humps'
+// ✅✅✅ FIX: Path ko theek kiya gaya hai ('../' se '../../') ✅✅✅
+import AttractionRepository from '../../repository/AttractionRepository'
 
 class AttractionService {
   private attractionRepository: AttractionRepository
 
   constructor() {
     this.attractionRepository = new AttractionRepository()
-    console.log('[AttractionService] AttractionRepository instantiated.')
+    console.log('[AttractionService] AttractionRepository instance created.')
   }
 
   async createOrUpdateAttraction(
     payload: CreateAttractionInternalPayload,
-    client: PoolClient,
+    client: PoolClient | null = null,
   ): Promise<Attraction> {
-    console.log('[AttractionService] createOrUpdateAttraction called with payload:', payload)
-
     const existingAttraction = await this.attractionRepository.getAttraction(
       payload.userFrom,
       payload.userTo,
       payload.date,
       client,
     )
-
-    let finalAttraction: Attraction | null
-
     if (existingAttraction) {
       console.log(
-        `[AttractionService] Found existing attraction ${existingAttraction.attractionId}. Updating.`,
+        `[AttractionService] Updating existing attraction ID: ${existingAttraction.attractionId}`,
       )
-      finalAttraction = await this.attractionRepository.updateAttraction(
+      const updatedAttraction = await this.attractionRepository.updateAttraction(
         existingAttraction.attractionId,
         {
           romanticRating: payload.romanticRating,
@@ -41,125 +40,88 @@ class AttractionService {
         },
         client,
       )
+      if (!updatedAttraction) throw new Error('Failed to update attraction.')
+      return updatedAttraction
     } else {
-      console.log('[AttractionService] No existing attraction found. Creating new one.')
-      finalAttraction = await this.attractionRepository.createAttraction(
-        { ...payload, result: null, firstMessageRights: null },
-        client,
+      console.log(
+        `[AttractionService] Creating new attraction from ${payload.userFrom} to ${payload.userTo}`,
       )
+      const newAttraction = await this.attractionRepository.createAttraction(payload, client)
+      if (!newAttraction) throw new Error('Failed to create attraction.')
+      return newAttraction
+    }
+  }
+
+  public calculateMatchResult(
+    attr1: Attraction,
+    attr2: Attraction,
+  ): {
+    isMatch: boolean
+    firstMessageRightsHolderId: string | null
+  } {
+    const r1 = attr1.romanticRating ?? 0
+    const s1 = attr1.sexualRating ?? 0
+    const f1 = attr1.friendshipRating ?? 0
+
+    const r2 = attr2.romanticRating ?? 0
+    const s2 = attr2.sexualRating ?? 0
+    const f2 = attr2.friendshipRating ?? 0
+
+    // Rule: Mismatch if one wants romance and the other doesn't.
+    if ((r1 > 0 && r2 === 0) || (r1 === 0 && r2 > 0)) {
+      return { isMatch: false, firstMessageRightsHolderId: null }
     }
 
-    if (!finalAttraction) {
-      throw new Error('Attraction creation or update failed within the repository layer.')
+    // Rule: Mismatch if one wants sexual and the other doesn't.
+    if ((s1 > 0 && s2 === 0) || (s1 === 0 && s2 > 0)) {
+      return { isMatch: false, firstMessageRightsHolderId: null }
     }
 
-    const otherWayAttraction = await this.attractionRepository.getAttraction(
-      payload.userTo,
-      payload.userFrom,
-      payload.date,
-      client,
-    )
+    // Rule: Mismatch if one is ONLY friends, but the other wants more.
+    if (r1 === 0 && s1 === 0 && f1 > 0 && (r2 > 0 || s2 > 0)) {
+      return { isMatch: false, firstMessageRightsHolderId: null }
+    }
+    if (r2 === 0 && s2 === 0 && f2 > 0 && (r1 > 0 || s1 > 0)) {
+      return { isMatch: false, firstMessageRightsHolderId: null }
+    }
 
-    if (otherWayAttraction) {
-      console.log('[AttractionService] Found mutual attraction. Calculating match result.')
-      const isMatch = await this.determineMatchResult(finalAttraction, otherWayAttraction)
+    // If all checks pass, it's a match.
+    const sum1 = r1 + s1 + f1
+    const sum2 = r2 + s2 + f2
+    let firstMessageRightsHolderId: string | null = null
 
-      if (isMatch) {
-        finalAttraction.result = true
-        otherWayAttraction.result = true
-        await this.attractionRepository.updateAttraction(
-          finalAttraction.attractionId,
-          { result: true },
-          client,
-        )
-        await this.attractionRepository.updateAttraction(
-          otherWayAttraction.attractionId,
-          { result: true },
-          client,
-        )
+    if (attr1.userFrom && attr2.userFrom) {
+      if (sum1 < sum2) {
+        firstMessageRightsHolderId = attr1.userFrom
+      } else if (sum2 < sum1) {
+        firstMessageRightsHolderId = attr2.userFrom
+      } else {
+        // Randomly assign if sums are equal
+        firstMessageRightsHolderId = Math.random() < 0.5 ? attr1.userFrom : attr2.userFrom
       }
     }
 
-    console.log(
-      `[AttractionService] Process complete for attraction ID: ${finalAttraction.attractionId}`,
-    )
-    return finalAttraction
+    return { isMatch: true, firstMessageRightsHolderId }
   }
 
-  // ✅ --- THIS IS THE FIX ---
-  // The missing determineFirstMessageRights function has been added back.
-  async determineFirstMessageRights(
-    attraction1: Attraction,
-    attraction2: Attraction,
-  ): Promise<boolean | null> {
-    if (attraction1.result !== true || attraction2.result !== true) {
-      return null
-    }
-    const sum1 =
-      (attraction1.romanticRating || 0) +
-      (attraction1.sexualRating || 0) +
-      (attraction1.friendshipRating || 0)
-    const sum2 =
-      (attraction2.romanticRating || 0) +
-      (attraction2.sexualRating || 0) +
-      (attraction2.friendshipRating || 0)
-
-    if (sum1 > sum2) return true
-    if (sum2 > sum1) return false
-    return Math.random() < 0.5
-  }
-
-  // No changes to the functions below, but included for completeness.
-
-  calculateAttractionResultString(r: number | null, s: number | null, f: number | null): string {
-    const R = r || 0
-    const S = s || 0
-    const F = f || 0
-    const total = R + S + F
-    if (total === 0) return 'No Interest'
-    if (R > 0 && S > 0 && F > 0) return 'Full Package'
-    if (R > 0 && S > 0) return 'Romantic & Sexual'
-    if (R > 0 && F > 0) return 'Romantic Friendship'
-    if (S > 0 && F > 0) return 'FWB'
-    if (R > 0) return 'Romantic'
-    if (S > 0) return 'Sexual'
-    if (F > 0) return 'Friendship'
-    return 'General Interest'
-  }
-
-  async getAttraction(userFrom: string, userTo: string, date: string): Promise<Attraction | null> {
-    return this.attractionRepository.getAttraction(userFrom, userTo, date)
-  }
-
-  async getAttractionsByUserFrom(userFrom: string): Promise<Attraction[]> {
-    return this.attractionRepository.getAttractionsByUserFrom(userFrom)
-  }
-
-  async getAttractionsByUserTo(userTo: string): Promise<Attraction[]> {
-    return this.attractionRepository.getAttractionsByUserTo(userTo)
+  async getAttraction(
+    userFrom: string,
+    userTo: string,
+    date: string,
+    client: PoolClient | null = null,
+  ): Promise<Attraction | null> {
+    return this.attractionRepository.getAttraction(userFrom, userTo, date, client)
   }
 
   async getAttractionsByUserFromAndUserTo(userFrom: string, userTo: string): Promise<Attraction[]> {
-    return (
-      (await this.attractionRepository.getAttractionsByUserFromAndUserTo(userFrom, userTo)) || []
-    )
+    return this.attractionRepository.getAttractionsByUserFromAndUserTo(userFrom, userTo)
   }
 
-  async determineMatchResult(attraction1: Attraction, attraction2: Attraction): Promise<boolean> {
-    const r1 = attraction1.romanticRating || 0
-    const s1 = attraction1.sexualRating || 0
-    const r2 = attraction2.romanticRating || 0
-    const s2 = attraction2.sexualRating || 0
-    if (r1 > 1 && r2 > 1) return true
-    if (r1 === 0 && r2 === 0 && s1 > 1 && s2 > 1) return true
-    return false
-  }
-
-  async updateAttraction(
+  async getAttractionById(
     attractionId: number,
-    updates: Partial<Attraction>,
+    client: PoolClient | Pool | null = null,
   ): Promise<Attraction | null> {
-    return this.attractionRepository.updateAttraction(attractionId, updates)
+    return this.attractionRepository.getAttractionById(attractionId, client)
   }
 }
 

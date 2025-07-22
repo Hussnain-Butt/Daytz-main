@@ -1,3 +1,6 @@
+// File: app/(app)/propose-date.tsx
+// ✅ COMPLETE AND FINAL UPDATED CODE
+
 import React, { useState, useEffect, useCallback, useRef } from 'react';
 import {
   SafeAreaView,
@@ -12,8 +15,8 @@ import {
   StatusBar as RNStatusBar,
   ScrollView,
   KeyboardAvoidingView,
-  Modal, // BubblePopup ke liye import
-  FlatList, // For autocomplete suggestions
+  Modal,
+  FlatList,
 } from 'react-native';
 import { Text, Avatar } from 'react-native-paper';
 import { format, parseISO, isValid } from 'date-fns';
@@ -34,11 +37,8 @@ import { useUserStore } from '../../store/useUserStore';
 // --- Assets ---
 const BACK_ARROW_ICON = require('../../assets/back_arrow_icon.png');
 const BRAND_LOGO = require('../../assets/brand.png');
-
-// =====> ALERT KI TASVEEREIN IMPORT KAREIN (PATH THEEK KAREIN) <=====
 const calcHappyIcon = require('../../assets/calc-happy.png');
 const calcErrorIcon = require('../../assets/calc-error.png');
-// =====================================================================
 
 // --- Screen Colors ---
 const screenColors = {
@@ -57,7 +57,7 @@ const screenColors = {
   White: '#FFFFFF',
 };
 
-// --- NEW BUBBLE POPUP COMPONENT ---
+// --- BUBBLE POPUP COMPONENT ---
 const BubblePopup = ({ visible, type, title, message, buttonText, onClose }) => {
   if (!visible) return null;
   const isSuccess = type === 'success';
@@ -81,7 +81,6 @@ const BubblePopup = ({ visible, type, title, message, buttonText, onClose }) => 
     </Modal>
   );
 };
-// --- END OF BUBBLE POPUP COMPONENT ---
 
 // --- Custom Hook for Debouncing ---
 const useDebounce = (value, delay) => {
@@ -95,6 +94,7 @@ const useDebounce = (value, delay) => {
 
 const ProposeDateScreen = () => {
   const router = useRouter();
+  // ✅✅✅ CHANGE: Attraction ratings ko yahan receive karein ✅✅✅
   const params = useLocalSearchParams<{
     userToId: string;
     dateForProposal: string;
@@ -141,7 +141,6 @@ const ProposeDateScreen = () => {
     onCloseCallback: undefined as (() => void) | undefined,
   });
 
-  // --- States and Refs for Autocomplete ---
   const [suggestions, setSuggestions] = useState([]);
   const [showSuggestions, setShowSuggestions] = useState(false);
   const [suggestionsPosition, setSuggestionsPosition] = useState({ top: 0, width: 0, left: 0 });
@@ -167,9 +166,7 @@ const ProposeDateScreen = () => {
     }
     try {
       const response = await fetch(
-        `https://maps.googleapis.com/maps/api/place/autocomplete/json?input=${encodeURIComponent(
-          input
-        )}&key=${GOOGLE_PLACES_API_KEY}`
+        `https://maps.googleapis.com/maps/api/place/autocomplete/json?input=${encodeURIComponent(input)}&key=${GOOGLE_PLACES_API_KEY}`
       );
       const json = await response.json();
       if (json.predictions) {
@@ -185,7 +182,6 @@ const ProposeDateScreen = () => {
       setShowSuggestions(false);
     }
   }, []);
-
   useEffect(() => {
     if (debouncedVenueName) {
       fetchPlaceSuggestions(debouncedVenueName);
@@ -235,7 +231,6 @@ const ProposeDateScreen = () => {
     setSelectedTime(time);
     setShowTimePicker(false);
   };
-
   const handleSelectSuggestion = (suggestion: any) => {
     setVenueName(suggestion.description);
     setSuggestions([]);
@@ -243,6 +238,7 @@ const ProposeDateScreen = () => {
     Keyboard.dismiss();
   };
 
+  // ✅✅✅ CHANGE: API Payload mein ab ratings shaamil hain ✅✅✅
   const handleProposeDate = useCallback(async () => {
     Keyboard.dismiss();
     if (!authUser?.sub || !userToId) {
@@ -253,8 +249,10 @@ const ProposeDateScreen = () => {
       showPopup('Validation Error', 'Please fill out venue and time.', 'error');
       return;
     }
+
     setIsSubmitting(true);
-    const payload = {
+
+    const payload: CreateDatePayload = {
       userTo: userToId,
       date: format(selectedEventDate, 'yyyy-MM-dd'),
       time: format(selectedTime, 'HH:mm:ss'),
@@ -264,6 +262,7 @@ const ProposeDateScreen = () => {
       friendshipRating: parseInt(friendshipRatingStr || '0', 10),
       isUpdate: isUpdate === 'true',
     };
+
     try {
       await createDate(payload);
       const tokenResponse = await getUserTokenBalance();
@@ -273,10 +272,7 @@ const ProposeDateScreen = () => {
       );
     } catch (err: any) {
       const backendMessage =
-        err?.context?.backendData?.message ||
-        err?.response?.data?.message ||
-        err.message ||
-        'Failed to send proposal.';
+        err?.response?.data?.message || err.message || 'Failed to send proposal.';
       showPopup('Proposal Failed', backendMessage, 'error');
       if (isAuthTokenApiError(err)) logout && logout();
     } finally {
@@ -299,9 +295,6 @@ const ProposeDateScreen = () => {
 
   const measureVenueInput = () => {
     venueInputRef.current?.measure((fx, fy, width, height, px, py) => {
-      // py is the Y-position relative to the screen
-      // height is the height of the input
-      // We add a small margin (4)
       setSuggestionsPosition({ top: py + height + 4, width, left: px });
     });
   };
@@ -339,9 +332,11 @@ const ProposeDateScreen = () => {
 
   if (isLoading) {
     return (
-      <View style={[styles.container, { justifyContent: 'center', alignItems: 'center' }]}>
-        <ActivityIndicator size="large" color={screenColors.textPrimary} />
-      </View>
+      <SafeAreaView style={styles.container}>
+        <View style={{ flex: 1, justifyContent: 'center', alignItems: 'center' }}>
+          <ActivityIndicator size="large" color={screenColors.textPrimary} />
+        </View>
+      </SafeAreaView>
     );
   }
 
@@ -350,7 +345,6 @@ const ProposeDateScreen = () => {
       <KeyboardAvoidingView
         behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
         style={{ flex: 1 }}>
-        {/* Main Content ScrollView */}
         <ScrollView
           contentContainerStyle={styles.scrollContentContainer}
           keyboardShouldPersistTaps="handled"
@@ -363,7 +357,6 @@ const ProposeDateScreen = () => {
               <Image source={BRAND_LOGO} style={styles.headerLogo} />
               <View style={{ width: 40 }} />
             </View>
-
             <View style={styles.mainContent}>
               <View style={styles.userInfoContainer}>
                 {targetUser?.profilePictureUrl ? (
@@ -380,8 +373,6 @@ const ProposeDateScreen = () => {
               <Text style={styles.dateDisplay}>
                 Date: {format(selectedEventDate, 'MMM dd, yyyy')}
               </Text>
-
-              {/* Venue Input Section */}
               <View style={styles.inputContainer}>
                 <Text style={styles.inputLabel}>Venue</Text>
                 <TextInput
@@ -391,12 +382,10 @@ const ProposeDateScreen = () => {
                   placeholderTextColor={screenColors.inputPlaceholder}
                   value={venueName}
                   onChangeText={setVenueName}
-                  onFocus={measureVenueInput} // Calculate position on focus
+                  onFocus={measureVenueInput}
                   onBlur={() => setTimeout(() => setShowSuggestions(false), 200)}
                 />
               </View>
-
-              {/* Time Input Section */}
               <View style={styles.inputContainer}>
                 <Text style={styles.inputLabel}>Time</Text>
                 <TouchableOpacity onPress={() => setShowTimePicker(true)} style={styles.textInput}>
@@ -412,12 +401,8 @@ const ProposeDateScreen = () => {
             </View>
           </View>
         </ScrollView>
-
-        {/* Footer outside ScrollView to stick to bottom */}
         <View style={styles.footer}>{renderFooter()}</View>
       </KeyboardAvoidingView>
-
-      {/* Autocomplete FlatList is now a sibling, not a child, to avoid nesting error */}
       {showSuggestions && suggestions.length > 0 && (
         <FlatList
           data={suggestions}
@@ -440,8 +425,6 @@ const ProposeDateScreen = () => {
           keyboardShouldPersistTaps="always"
         />
       )}
-
-      {/* Other Modals */}
       <DateTimePickerModal
         isVisible={showTimePicker}
         mode="time"
@@ -465,7 +448,11 @@ const ProposeDateScreen = () => {
 };
 
 const styles = StyleSheet.create({
-  container: { flex: 1, backgroundColor: screenColors.background },
+  container: {
+    flex: 1,
+    backgroundColor: screenColors.background,
+    paddingTop: Platform.OS === 'android' ? RNStatusBar.currentHeight : 0,
+  },
   scrollContentContainer: { flexGrow: 1, justifyContent: 'space-between' },
   innerContainer: { paddingHorizontal: 20 },
   mainContent: { flex: 1 },
@@ -589,20 +576,16 @@ const styles = StyleSheet.create({
   errorButtonText: { color: screenColors.White, fontSize: 15, fontWeight: 'bold' },
   successButtonText: { color: screenColors.Black, fontSize: 15, fontWeight: 'bold' },
   suggestionsList: {
-    position: 'absolute', // MUST BE ABSOLUTE
+    position: 'absolute',
     maxHeight: 200,
     backgroundColor: screenColors.inputBackground,
     borderRadius: 12,
     borderWidth: 1,
     borderColor: screenColors.avatarBorder,
-    zIndex: 1000, // HIGH Z-INDEX TO BE ON TOP OF EVERYTHING
-    elevation: 10, // For Android shadow
+    zIndex: 1000,
+    elevation: 10,
   },
-  suggestionItem: {
-    padding: 15,
-    borderBottomWidth: 1,
-    borderBottomColor: '#3A3A3C',
-  },
+  suggestionItem: { padding: 15, borderBottomWidth: 1, borderBottomColor: '#3A3A3C' },
   suggestionText: { color: screenColors.textPrimary, fontSize: 16 },
 });
 

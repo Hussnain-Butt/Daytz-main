@@ -80,11 +80,21 @@ export const createAttractionHandler = asyncHandler(
         )
       }
 
+      // ✅✅✅ CHANGE: Yahan naya notification bheja ja raha hai ✅✅✅
+      // Attraction create hotay hi doosre user ko notification bhej do.
+      if (!isUpdate) {
+        // Sirf nayi attraction par bhejein, update par nahi
+        await notificationService.sendAttractionProposalNotification(
+          authenticatedUserId,
+          userTo,
+          date,
+        )
+      }
+
       await client.query('COMMIT')
 
+      // Match ka notification pehle ki tarah sirf tab jayega jab match hoga
       if (finalAttraction.result) {
-        // ✅ --- THIS IS THE FIX ---
-        // We now pass the required third argument, the attractionId.
         await notificationService.sendMatchNotification(
           authenticatedUserId,
           userTo,
