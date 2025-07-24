@@ -1,8 +1,11 @@
-import React, { useState, useEffect, useCallback } from 'react';
+// File: app/components/calendar.tsx
+// ✅ COMPLETE AND FINAL UPDATED FILE (DISABLE PAST MONTHS, ENABLE ONLY CURRENT AND NEXT 6 MONTHS)
+
+import React, { useState, useEffect } from 'react';
 import { View, StyleSheet, Text, TouchableOpacity, Alert } from 'react-native';
 import { Calendar, DateData } from 'react-native-calendars';
 import { useRouter } from 'expo-router';
-import { format, startOfMonth, parse, isBefore, startOfToday } from 'date-fns';
+import { format, startOfMonth, parse, isBefore, startOfToday, addMonths } from 'date-fns';
 import { CalendarDay } from '../types/CalendarDay';
 import { User as Auth0User } from 'react-native-auth0';
 import { colors } from '../utils/theme';
@@ -48,16 +51,13 @@ const VideoCalendar: React.FC<VideoCalendarProps> = ({ user, calendarData }) => 
       }
     });
 
-    // 2. Mark past dates as disabled with a strikethrough effect
+    // 2. Disable days before today with strikethrough
     const monthStartDate = startOfMonth(parse(currentMonth, 'yyyy-MM-dd', new Date()));
-    const daysInMonth = 31; // Check up to 31 days to cover all months
+    const daysInMonth = 31;
     for (let i = 0; i < daysInMonth; i++) {
       const day = new Date(monthStartDate.getFullYear(), monthStartDate.getMonth(), i + 1);
-
       if (day.getMonth() !== monthStartDate.getMonth()) break;
-
       const dateStr = format(day, 'yyyy-MM-dd');
-
       if (isBefore(day, today) && !newMarkedDates[dateStr]) {
         newMarkedDates[dateStr] = {
           disabled: true,
@@ -76,46 +76,43 @@ const VideoCalendar: React.FC<VideoCalendarProps> = ({ user, calendarData }) => 
   }, [calendarData, currentMonth]);
 
   const handleDayPress = (day: DateData) => {
-    // This check is important because custom marking allows pressing disabled dates
-    if (markedDates[day.dateString]?.disabled) {
-      return;
-    }
-
-    const dateString = day.dateString;
-    console.log(`VideoCalendar: Day pressed: ${dateString}`);
+    if (markedDates[day.dateString]?.disabled) return;
 
     if (!user?.sub) {
       Alert.alert('Authentication Error', 'User information not available. Please try again.');
       return;
     }
 
-    const dateInfo = markedDates[dateString];
+    const dateInfo = markedDates[day.dateString];
     if (dateInfo?.marked) {
-      console.log(`VideoCalendar: Navigating to Stories for marked date ${dateString}`);
-      router.push({ pathname: '/(app)/stories', params: { date: dateString } });
+      router.push({ pathname: '/(app)/stories', params: { date: day.dateString } });
     } else {
-      console.log(`VideoCalendar: Navigating to UploadDayVideo for non-marked date ${dateString}`);
-      router.push({ pathname: '/(app)/upload-day-video', params: { date: dateString } });
+      router.push({ pathname: '/(app)/upload-day-video', params: { date: day.dateString } });
     }
   };
+
+  // Calculate min and max dates
+  const today = startOfToday();
+  const maxDateObj = addMonths(today, 6);
+  const minDateStr = format(today, 'yyyy-MM-dd');
+  const maxDateStr = format(maxDateObj, 'yyyy-MM-dd');
 
   return (
     <View style={styles.calendarWrapper}>
       <Calendar
-        onMonthChange={(month) => {
-          setCurrentMonth(month.dateString);
-        }}
+        onMonthChange={(month) => setCurrentMonth(month.dateString)}
         onDayPress={handleDayPress}
         markingType={'custom'}
         markedDates={markedDates}
         style={styles.calendar}
+        minDate={minDateStr}
+        maxDate={maxDateStr}
         theme={{
           backgroundColor: colors.Background || '#1E1E1E',
           calendarBackground: colors.Background || '#1E1E1E',
           textSectionTitleColor: colors.LightGrey || '#b6c1cd',
           selectedDayBackgroundColor: colors.GoldPrimary || '#FFDB5C',
           selectedDayTextColor: colors.Black || '#000000',
-          // ✅ CHANGE: Today's date color changed to white
           todayTextColor: colors.White || '#FFFFFF',
           dayTextColor: colors.White || '#E0E0E0',
           dotColor: colors.GoldPrimary || 'blue',

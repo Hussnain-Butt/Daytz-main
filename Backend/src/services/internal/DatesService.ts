@@ -1,11 +1,8 @@
 // File: src/services/internal/DatesService.ts
-// ✅ COMPLETE AND FINAL CORRECTED CODE
+// ✅ COMPLETE AND FINAL UPDATED CODE
 
-// ✅✅✅ FIX: Path ko theek kiya gaya hai ('../' se '../../') ✅✅✅
 import pool from '../../db'
 import { PoolClient } from 'pg'
-import * as humps from 'humps'
-// ✅✅✅ FIX: Path ko theek kiya gaya hai ('../' se '../../') ✅✅✅
 import { DateObject as DateType, CreateDatePayload, UpcomingDate } from '../../types/Date'
 import DatesRepository from '../../repository/DatesRepository'
 import AttractionRepository from '../../repository/AttractionRepository'
@@ -39,7 +36,6 @@ class DatesService {
     try {
       await client.query('BEGIN')
 
-      // Step 1: Proposer (User A) ki attraction save/update karein
       const proposerAttraction = await this.attractionService.createOrUpdateAttraction(
         {
           userFrom: proposerUserId,
@@ -57,7 +53,6 @@ class DatesService {
         client,
       )
 
-      // Step 2: Proposee (User B) ki attraction fetch karein
       const proposeeAttraction = await this.attractionService.getAttraction(
         userTo,
         proposerUserId,
@@ -65,18 +60,19 @@ class DatesService {
         client,
       )
 
-      // Agar proposee ne pehle attract nahi kiya to date nahi ban sakti
       if (!proposeeAttraction) {
-        throw new Error('Cannot propose a date without prior interest from the other user.')
+        const error = new Error(
+          'You can propose a date once both of you have shown mutual interest for this day. The other user has been notified of your interest!',
+        )
+        ;(error as any).code = 'NOT_A_MATCH'
+        throw error
       }
 
-      // Step 3: Matching algorithm run karein
       const matchResult = this.attractionService.calculateMatchResult(
         proposerAttraction,
         proposeeAttraction,
       )
 
-      // Step 4: Dono attraction records ko match result se update karein
       await Promise.all([
         this.attractionRepository.updateAttraction(
           proposerAttraction.attractionId,
@@ -90,14 +86,14 @@ class DatesService {
         ),
       ])
 
-      // Step 5: Agar match nahi hua to error throw karein
       if (!matchResult.isMatch) {
-        const error = new Error("It's not a match.")
+        const error = new Error(
+          'Your interests for this date are not aligned. You can adjust your interest levels and try again if you wish.',
+        )
         ;(error as any).code = 'NOT_A_MATCH'
         throw error
       }
 
-      // Step 6: Agar match ho gaya, to date create karein aur tokens deduct karein
       const tokenCost = romanticRating + sexualRating + friendshipRating
       if (tokenCost > 0 && !payload.isUpdate) {
         await this.userService.spendTokensForUser(
@@ -119,34 +115,44 @@ class DatesService {
         client,
       )
 
-      // Step 7: Sahi user ko notification bhejein
-      const notificationRecipientId = matchResult.firstMessageRightsHolderId
-      if (notificationRecipientId) {
-        await this.notificationService.sendDateProposalNotification(
-          proposerUserId,
-          notificationRecipientId, // Notification sirf 'winner' ko jayega
-          {
-            dateId: dateEntry.dateId,
-            date: dateEntry.date,
-            time: dateEntry.time || '',
-            venue: dateEntry.locationMetadata?.name || 'A new spot!',
-          },
-          { romanticRating, sexualRating, friendshipRating },
-        )
-      } else {
-        console.warn(`[DatesService] Match occurred but no notification recipient was determined.`)
-      }
+      // ✅ --- THIS IS THE FIX ---
+      // The notification for a new date proposal MUST always go to the person being invited.
+      // We ignore `firstMessageRights` here because that's for messaging, not for proposals.
+      // The recipient is `userTo` from the original payload.
+      const notificationRecipientId = userTo
+
+      console.log(
+        `[DatesService] Sending date proposal notification from ${proposerUserId} to ${notificationRecipientId}.`,
+      )
+
+      await this.notificationService.sendDateProposalNotification(
+        proposerUserId,
+        notificationRecipientId, // ALWAYS notify the person being asked out.
+        {
+          dateId: dateEntry.dateId,
+          date: dateEntry.date,
+          time: dateEntry.time || '',
+          venue: dateEntry.locationMetadata?.name || 'A new spot!',
+        },
+        { romanticRating, sexualRating, friendshipRating },
+        client,
+      )
 
       await client.query('COMMIT')
+      console.log(
+        `[DatesService] Transaction COMMITTED for date proposal between ${proposerUserId} and ${userTo}.`,
+      )
       return dateEntry
     } catch (error) {
       await client.query('ROLLBACK')
-      console.error('[DatesService.createFullDateProposal] Transaction rolled back. Error:', error)
+      console.error('[DatesService.createFullDateProposal] Transaction ROLLED BACK. Error:', error)
       throw error
     } finally {
       client.release()
     }
   }
+
+  // --- Other methods remain unchanged ---
 
   async getDateEntryById(dateId: number): Promise<DateType | null> {
     return this.datesRepository.getDateEntryById(dateId)

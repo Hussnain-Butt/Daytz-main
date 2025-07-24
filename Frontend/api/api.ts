@@ -1,5 +1,4 @@
-// File: api/api.ts
-// ✅ COMPLETE AND FINAL UPDATED CODE (with explicit header control)
+// ✅ COMPLETE AND FINAL UPDATED CODE
 
 import axios, { AxiosInstance, AxiosProgressEvent, AxiosResponse } from 'axios';
 import { Platform } from 'react-native';
@@ -34,11 +33,6 @@ const apiClient: AxiosInstance = axios.create({ baseURL: API_BASE_URL, timeout: 
 
 export type GetAccessTokenFunc = () => Promise<string | null | undefined>;
 
-/**
- * ✅ NEW: Explicitly sets or removes the Authorization header.
- * This is crucial for robustly handling login and logout state changes.
- * @param token The bearer token, or null to remove the header.
- */
 export const setApiClientAuthHeader = (token: string | null) => {
   if (token) {
     console.log('[API] Setting Axios auth header.');
@@ -49,16 +43,10 @@ export const setApiClientAuthHeader = (token: string | null) => {
   }
 };
 
-/**
- * Configures an interceptor to transparently handle token fetching/refreshing for API calls.
- * This works alongside the explicit `setApiClientAuthHeader` function.
- */
 export const configureApiClient = (getAccessTokenFunc: GetAccessTokenFunc) => {
   console.log('[API] Configuring Axios interceptor with token provider.');
   apiClient.interceptors.request.use(
     async (config) => {
-      // If a header is not already set, try to get one.
-      // This is useful for token refreshes.
       if (!config.headers.Authorization) {
         const token = await getAccessTokenFunc();
         if (token) {
@@ -76,16 +64,11 @@ export const isAuthTokenApiError = (error: any): boolean => {
   return status === 401 || status === 403;
 };
 
-const handleApiError = (error: unknown, context: string): void => {
-  let message = 'An unknown error occurred.';
-  if (axios.isAxiosError(error)) message = error.response?.data?.message || error.message;
-  else if (error instanceof Error) message = error.message;
-  const newError = new Error(`API call "${context}" failed: ${message}`);
-  (newError as any).originalError = error;
-  throw newError;
-};
+// NOTE: The problematic handleApiError function has been removed.
+// We will now re-throw the original error in each function.
 
-// ✅ ================== NAYI API FUNCTION ==================
+// ================== API FUNCTIONS ==================
+
 export const addDateFeedback = async (
   dateId: number,
   payload: { outcome: DateOutcome; notes?: string }
@@ -93,10 +76,10 @@ export const addDateFeedback = async (
   try {
     return await apiClient.patch<DateObject>(`/dates/${dateId}/feedback`, payload);
   } catch (e) {
-    handleApiError(e, `addDateFeedback (ID: ${dateId})`);
     throw e;
   }
 };
+
 // --- USER API ---
 export const createUser = async (
   userData: ActualCreateUserPayloadType
@@ -104,7 +87,6 @@ export const createUser = async (
   try {
     return await apiClient.post<User>(`/users`, userData);
   } catch (e) {
-    handleApiError(e, 'createUser');
     throw e;
   }
 };
@@ -115,7 +97,6 @@ export const getUserById = async (userId: string): Promise<AxiosResponse<User | 
   } catch (e: any) {
     if (axios.isAxiosError(e) && e.response?.status === 404)
       return { ...e.response, status: 404, data: null } as AxiosResponse<User | null>;
-    handleApiError(e, `getUserById (ID: ${userId})`);
     throw e;
   }
 };
@@ -124,7 +105,6 @@ export const updateUser = async (updateData: Partial<User>): Promise<AxiosRespon
   try {
     return await apiClient.patch<User>(`/users`, updateData);
   } catch (e) {
-    handleApiError(e, 'updateUser');
     throw e;
   }
 };
@@ -134,7 +114,6 @@ export const getMyNotifications = async (): Promise<AxiosResponse<Notification[]
   try {
     return await apiClient.get<Notification[]>(`/notifications`);
   } catch (e) {
-    handleApiError(e, 'getMyNotifications');
     throw e;
   }
 };
@@ -145,7 +124,6 @@ export const getUnreadNotificationsCount = async (): Promise<
   try {
     return await apiClient.get<UnreadCountResponse>(`/notifications/unread-count`);
   } catch (e) {
-    handleApiError(e, 'getUnreadNotificationsCount');
     throw e;
   }
 };
@@ -154,7 +132,6 @@ export const markNotificationsAsRead = async (): Promise<AxiosResponse<{ message
   try {
     return await apiClient.post(`/notifications/mark-as-read`);
   } catch (e) {
-    handleApiError(e, 'markNotificationsAsRead');
     throw e;
   }
 };
@@ -166,7 +143,6 @@ export const registerPushToken = async (
   try {
     return await apiClient.post(`/users/push-token`, { token: fcmToken });
   } catch (e) {
-    handleApiError(e, 'registerPushToken');
     throw e;
   }
 };
@@ -176,12 +152,10 @@ export const getUserTokenBalance = async (): Promise<AxiosResponse<{ tokenBalanc
   try {
     return await apiClient.get<{ tokenBalance: number }>(`/users/tokens`);
   } catch (e) {
-    handleApiError(e, 'getUserTokenBalance');
     throw e;
   }
 };
 
-// --- (Rest of the functions are here) ---
 export const purchaseTokens = async (payload: {
   tokenAmount: number;
   description: string;
@@ -190,35 +164,35 @@ export const purchaseTokens = async (payload: {
   try {
     return await apiClient.post(`/transactions/purchase`, payload);
   } catch (e) {
-    handleApiError(e, 'purchaseTokens');
     throw e;
   }
 };
+
 export const getCalendarDaysByUserId = async (): Promise<AxiosResponse<CalendarDay[]>> => {
   try {
     return await apiClient.get<CalendarDay[]>(`/calendarDays/user`);
   } catch (e) {
-    handleApiError(e, 'getCalendarDaysByUserId');
     throw e;
   }
 };
+
 export const getStoriesByDate = async (
   date: string
 ): Promise<AxiosResponse<BackendStoryItem[]>> => {
   try {
     return await apiClient.get<BackendStoryItem[]>(`/stories/${date}`);
   } catch (e) {
-    handleApiError(e, `getStoriesByDate (date: ${date})`);
     throw e;
   }
 };
+
 export const createDate = async (
   payload: CreateDatePayload
 ): Promise<AxiosResponse<DateObject>> => {
   try {
     return await apiClient.post<DateObject>(`/date`, payload);
   } catch (e) {
-    handleApiError(e, 'createDate (Planned Event)');
+    // ✅ FIX: Re-throwing the original error to preserve the .response object
     throw e;
   }
 };
@@ -231,11 +205,10 @@ export const getDateById = async (
   } catch (e: any) {
     if (axios.isAxiosError(e) && e.response?.status === 404)
       return { ...e.response, status: 404, data: null } as AxiosResponse<DetailedDateObject | null>;
-    handleApiError(e, `getDateById (ID: ${dateId})`);
     throw e;
   }
 };
-// ✅ MODIFIED: This function is now more generic for updates and rescheduling.
+
 export const updateDate = async (
   dateId: string,
   payload: Partial<{
@@ -248,21 +221,18 @@ export const updateDate = async (
   try {
     return await apiClient.patch<DateObject>(`/dates/${dateId}`, payload);
   } catch (e) {
-    handleApiError(e, `updateDate (ID: ${dateId})`);
     throw e;
   }
 };
 
-// ✅ NEW: Function to cancel a date.
 export const cancelDate = async (dateId: string): Promise<AxiosResponse<DateObject>> => {
   try {
-    // The endpoint is .../cancel, so we don't need a payload.
     return await apiClient.patch<DateObject>(`/dates/${dateId}/cancel`, {});
   } catch (e) {
-    handleApiError(e, `cancelDate (ID: ${dateId})`);
     throw e;
   }
 };
+
 export const getDateByUserFromUserToAndDate = async (
   userFrom: string,
   userTo: string,
@@ -273,20 +243,20 @@ export const getDateByUserFromUserToAndDate = async (
   } catch (e: any) {
     if (axios.isAxiosError(e) && e.response?.status === 404)
       return { ...e.response, status: 404, data: null } as AxiosResponse<DateObject | null>;
-    handleApiError(e, `getDateByUserFromUserToAndDate`);
     throw e;
   }
 };
+
 export const createAttraction = async (
   payload: Omit<CreateAttractionPayload, 'userFrom'>
 ): Promise<AxiosResponse<AttractionResponse>> => {
   try {
     return await apiClient.post<AttractionResponse>(`/attraction`, payload);
   } catch (e) {
-    handleApiError(e, 'createAttraction');
     throw e;
   }
 };
+
 export const getAttractionByUserFromUserToAndDate = async (
   userFromId: string,
   userToId: string,
@@ -297,10 +267,10 @@ export const getAttractionByUserFromUserToAndDate = async (
   } catch (e: any) {
     if (axios.isAxiosError(e) && e.response?.status === 404)
       return { ...e.response, status: 404, data: null } as AxiosResponse<AttractionResponse | null>;
-    handleApiError(e, `getAttractionByUserFromUserToAndDate`);
     throw e;
   }
 };
+
 export const uploadProfilePicture = async (
   formData: FormData
 ): Promise<AxiosResponse<{ message: string; profilePictureUrl: string; user: User }>> => {
@@ -310,10 +280,10 @@ export const uploadProfilePicture = async (
       timeout: 180000,
     });
   } catch (e) {
-    handleApiError(e, 'uploadProfilePicture');
     throw e;
   }
 };
+
 export const uploadHomepageVideo = async (
   formData: FormData,
   onUploadProgress?: (progressEvent: AxiosProgressEvent) => void
@@ -325,10 +295,10 @@ export const uploadHomepageVideo = async (
       onUploadProgress,
     });
   } catch (e) {
-    handleApiError(e, 'uploadHomepageVideo');
     throw e;
   }
 };
+
 export const uploadCalendarVideo = async (
   formData: FormData,
   onUploadProgress?: (progressEvent: AxiosProgressEvent) => void
@@ -340,10 +310,10 @@ export const uploadCalendarVideo = async (
       onUploadProgress,
     });
   } catch (e) {
-    handleApiError(e, 'uploadCalendarVideo');
     throw e;
   }
 };
+
 export const getPlayableVideoUrl = async (identifier: {
   vimeoUri?: string | null;
   calendarId?: number | null;
@@ -362,7 +332,6 @@ export const getPlayableVideoUrl = async (identifier: {
         status: 404,
         data: { playableUrl: null, message: 'Video not found' },
       } as AxiosResponse<{ playableUrl: string | null; message?: string }>;
-    handleApiError(e, 'getPlayableVideoUrl');
     throw e;
   }
 };
@@ -371,7 +340,6 @@ export const getUpcomingDates = async (): Promise<AxiosResponse<UpcomingDate[]>>
   try {
     return await apiClient.get<UpcomingDate[]>(`/dates/me/upcoming`);
   } catch (e) {
-    handleApiError(e, 'getUpcomingDates');
     throw e;
   }
 };

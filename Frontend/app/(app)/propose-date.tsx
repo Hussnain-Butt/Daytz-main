@@ -1,4 +1,3 @@
-// File: app/(app)/propose-date.tsx
 // ✅ COMPLETE AND FINAL UPDATED CODE
 
 import React, { useState, useEffect, useCallback, useRef } from 'react';
@@ -94,7 +93,6 @@ const useDebounce = (value, delay) => {
 
 const ProposeDateScreen = () => {
   const router = useRouter();
-  // ✅✅✅ CHANGE: Attraction ratings ko yahan receive karein ✅✅✅
   const params = useLocalSearchParams<{
     userToId: string;
     dateForProposal: string;
@@ -122,17 +120,13 @@ const ProposeDateScreen = () => {
 
   const [targetUser, setTargetUser] = useState<Partial<User> | null>(null);
   const [isLoading, setIsLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
   const [existingDateStatus, setExistingDateStatus] = useState<DateType['status'] | null>(null);
-
-  const initialEventDate = dateForProposal ? parseISO(dateForProposal) : new Date();
-  const [selectedEventDate, setSelectedEventDate] = useState<Date>(
-    isValid(initialEventDate) ? initialEventDate : new Date()
-  );
+  const [selectedEventDate, setSelectedEventDate] = useState<Date | null>(null);
   const [showTimePicker, setShowTimePicker] = useState(false);
   const [selectedTime, setSelectedTime] = useState<Date | null>(null);
   const [venueName, setVenueName] = useState('');
   const [isSubmitting, setIsSubmitting] = useState(false);
-
   const [popupState, setPopupState] = useState({
     visible: false,
     type: 'error' as 'success' | 'error',
@@ -140,7 +134,6 @@ const ProposeDateScreen = () => {
     message: '',
     onCloseCallback: undefined as (() => void) | undefined,
   });
-
   const [suggestions, setSuggestions] = useState([]);
   const [showSuggestions, setShowSuggestions] = useState(false);
   const [suggestionsPosition, setSuggestionsPosition] = useState({ top: 0, width: 0, left: 0 });
@@ -156,7 +149,7 @@ const ProposeDateScreen = () => {
     setPopupState({ visible: true, title, message, type, onCloseCallback });
   };
 
-  const GOOGLE_PLACES_API_KEY = 'AIzaSyCxKxK1sBXyfpme2zIJaseUa8E_KWWqHkM';
+  const GOOGLE_PLACES_API_KEY = 'YOUR_GOOGLE_PLACES_API_KEY_HERE'; // ⚠️ Insecure, move to backend
 
   const fetchPlaceSuggestions = useCallback(async (input: string) => {
     if (!input || input.length < 3) {
@@ -182,6 +175,7 @@ const ProposeDateScreen = () => {
       setShowSuggestions(false);
     }
   }, []);
+
   useEffect(() => {
     if (debouncedVenueName) {
       fetchPlaceSuggestions(debouncedVenueName);
@@ -196,34 +190,44 @@ const ProposeDateScreen = () => {
     if (Platform.OS === 'android') RNStatusBar.setBackgroundColor(screenColors.background);
 
     if (!userToId || !dateForProposal || !authUser?.sub) {
-      showPopup('Error', 'Required information is missing.', 'error', () => router.back());
+      setError('Required information is missing to propose a date.');
+      setIsLoading(false);
       return;
     }
+
+    const initialEventDate = parseISO(dateForProposal);
+    if (!isValid(initialEventDate)) {
+      setError('The provided date is invalid.');
+      setIsLoading(false);
+      return;
+    }
+    setSelectedEventDate(initialEventDate);
+
     const fetchInitialData = async () => {
-      setIsLoading(true);
       try {
         if (targetUserName) {
           setTargetUser({ firstName: targetUserName, profilePictureUrl: targetUserProfilePic });
         } else {
           const response = await getUserById(userToId);
-          setTargetUser(response.data || { firstName: 'User Not Found' });
+          if (!response.data) throw new Error('Target user not found.');
+          setTargetUser(response.data);
         }
-      } catch (fetchError) {
-        setTargetUser({ firstName: 'Error Loading User' });
-      }
-      try {
         const dateResponse = await getDateByUserFromUserToAndDate(
-          authUser.sub,
+          authUser.sub!,
           userToId,
           dateForProposal
         );
-        if (dateResponse.data?.status)
+        if (dateResponse.data?.status) {
           setExistingDateStatus(dateResponse.data.status as DateType['status']);
-      } catch (dateError) {
-        console.log('No existing date found, which is normal.');
+        }
+      } catch (err) {
+        console.error('Failed to fetch initial data for propose date screen:', err);
+        setError('Failed to load user details. Please try again.');
+      } finally {
+        setIsLoading(false);
       }
-      setIsLoading(false);
     };
+
     fetchInitialData();
   }, [userToId, dateForProposal, authUser?.sub, targetUserName, targetUserProfilePic]);
 
@@ -237,19 +241,22 @@ const ProposeDateScreen = () => {
     setShowSuggestions(false);
     Keyboard.dismiss();
   };
+  const measureVenueInput = () => {
+    venueInputRef.current?.measure((fx, fy, width, height, px, py) => {
+      setSuggestionsPosition({ top: py + height + 4, width, left: px });
+    });
+  };
 
-  // ✅✅✅ CHANGE: API Payload mein ab ratings shaamil hain ✅✅✅
   const handleProposeDate = useCallback(async () => {
     Keyboard.dismiss();
-    if (!authUser?.sub || !userToId) {
-      showPopup('Error', 'Authentication issue.', 'error');
+    if (!authUser?.sub || !userToId || !selectedEventDate) {
+      showPopup('Error', 'Essential information is missing.', 'error');
       return;
     }
     if (!selectedTime || !venueName.trim()) {
       showPopup('Validation Error', 'Please fill out venue and time.', 'error');
       return;
     }
-
     setIsSubmitting(true);
 
     const payload: CreateDatePayload = {
@@ -271,9 +278,25 @@ const ProposeDateScreen = () => {
         router.replace('/(app)/calendar')
       );
     } catch (err: any) {
-      const backendMessage =
-        err?.response?.data?.message || err.message || 'Failed to send proposal.';
-      showPopup('Proposal Failed', backendMessage, 'error');
+      // ✅ --- DEBUGGING LOGS ---
+      // Yeh lines error ko terminal mein print karwayengi
+      console.log('--- CATCH BLOCK ENTERED ---');
+      console.log('Error Message:', err.message);
+      console.log('Is Response available?:', !!err.response);
+      console.log('Response Data:', err?.response?.data);
+
+      const errorMessage = err?.response?.data?.message || '';
+
+      if (err?.response?.data?.code === 'NOT_A_MATCH' || errorMessage.includes('are not aligned')) {
+        showPopup(
+          'Match Not Found',
+          'Your interests for this date are not aligned. You can adjust your interest levels and try again if you wish.',
+          'error'
+        );
+      } else {
+        showPopup('Proposal Failed', errorMessage || 'An unexpected error occurred.', 'error');
+      }
+
       if (isAuthTokenApiError(err)) logout && logout();
     } finally {
       setIsSubmitting(false);
@@ -292,12 +315,6 @@ const ProposeDateScreen = () => {
     friendshipRatingStr,
     logout,
   ]);
-
-  const measureVenueInput = () => {
-    venueInputRef.current?.measure((fx, fy, width, height, px, py) => {
-      setSuggestionsPosition({ top: py + height + 4, width, left: px });
-    });
-  };
 
   const renderFooter = () => {
     if (existingDateStatus === 'pending') {
@@ -332,10 +349,19 @@ const ProposeDateScreen = () => {
 
   if (isLoading) {
     return (
-      <SafeAreaView style={styles.container}>
-        <View style={{ flex: 1, justifyContent: 'center', alignItems: 'center' }}>
-          <ActivityIndicator size="large" color={screenColors.textPrimary} />
-        </View>
+      <SafeAreaView style={[styles.container, styles.centered]}>
+        <ActivityIndicator size="large" color={screenColors.textPrimary} />
+      </SafeAreaView>
+    );
+  }
+
+  if (error) {
+    return (
+      <SafeAreaView style={[styles.container, styles.centered]}>
+        <Text style={styles.errorText}>{error}</Text>
+        <TouchableOpacity onPress={() => router.back()} style={styles.backButtonError}>
+          <Text style={styles.backButtonText}>Go Back</Text>
+        </TouchableOpacity>
       </SafeAreaView>
     );
   }
@@ -370,9 +396,11 @@ const ProposeDateScreen = () => {
                 )}
                 <Text style={styles.userName}>{targetUser?.firstName || 'User'}</Text>
               </View>
-              <Text style={styles.dateDisplay}>
-                Date: {format(selectedEventDate, 'MMM dd, yyyy')}
-              </Text>
+              {selectedEventDate && (
+                <Text style={styles.dateDisplay}>
+                  Date: {format(selectedEventDate, 'MMM dd, yyyy')}
+                </Text>
+              )}
               <View style={styles.inputContainer}>
                 <Text style={styles.inputLabel}>Venue</Text>
                 <TextInput
@@ -447,12 +475,27 @@ const ProposeDateScreen = () => {
   );
 };
 
+// --- Styles ---
 const styles = StyleSheet.create({
   container: {
     flex: 1,
     backgroundColor: screenColors.background,
     paddingTop: Platform.OS === 'android' ? RNStatusBar.currentHeight : 0,
   },
+  centered: { flex: 1, justifyContent: 'center', alignItems: 'center', padding: 20 },
+  errorText: {
+    color: screenColors.PinkPrimary,
+    fontSize: 18,
+    textAlign: 'center',
+    marginBottom: 20,
+  },
+  backButtonError: {
+    backgroundColor: screenColors.GoldPrimary,
+    paddingVertical: 12,
+    paddingHorizontal: 30,
+    borderRadius: 25,
+  },
+  backButtonText: { color: screenColors.Black, fontSize: 16, fontWeight: 'bold' },
   scrollContentContainer: { flexGrow: 1, justifyContent: 'space-between' },
   innerContainer: { paddingHorizontal: 20 },
   mainContent: { flex: 1 },

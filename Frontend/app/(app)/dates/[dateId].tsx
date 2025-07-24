@@ -38,7 +38,6 @@ const BRAND_LOGO = require('../../../assets/brand.png');
 const calcHappyIcon = require('../../../assets/calc-happy.png');
 const calcErrorIcon = require('../../../assets/calc-error.png');
 
-// ✅ UPDATED: Screen colors now reflect a consistent theme for the modal
 const screenColors = {
   background: '#121212',
   textPrimary: '#FFFFFF',
@@ -48,9 +47,9 @@ const screenColors = {
   inputBorder: '#555555',
   acceptButton: '#28a745',
   declineButton: '#dc3545',
-  rescheduleButton: '#FFD700', // Gold color for reschedule
-  cancelModalButton: '#4A4A4A', // Neutral grey for cancel
-  submitModalButton: '#ff149d', // Primary pink for submit
+  rescheduleButton: '#FFD700',
+  cancelModalButton: '#4A4A4A',
+  submitModalButton: '#ff149d',
   buttonText: '#FFFFFF',
   avatarBorder: '#A020F0',
   PinkPrimary: '#ff149d',
@@ -84,7 +83,7 @@ const BubblePopup = ({ visible, type, title, message, buttonText, onClose }) => 
   );
 };
 
-// ✅ UPDATED: Reschedule Modal Component now uses the new color scheme from styles
+// Reschedule Modal Component
 const RescheduleModal = ({ visible, onClose, onSubmit, currentDateDetails }) => {
   const [newDate, setNewDate] = useState(
     currentDateDetails.date && isValid(parseISO(currentDateDetails.date))
@@ -219,10 +218,9 @@ const DateDetailScreen = () => {
     setIsSubmitting(true);
     try {
       await updateDate(dateId, { status });
-      showPopup('Success', `Date proposal has been ${status}.`, 'success', () => {
-        if (status === 'approved') router.back();
-        else fetchDateDetails();
-      });
+      // Fetch the latest details to show the updated status immediately
+      await fetchDateDetails();
+      showPopup('Success', `Date proposal has been ${status}.`, 'success');
     } catch (error: any) {
       const errorMessage = error.response?.data?.message || 'An error occurred.';
       showPopup('Error', errorMessage, 'error');
@@ -281,30 +279,18 @@ const DateDetailScreen = () => {
     }
   };
 
+  // ✅ --- THIS IS THE FIX ---
+  // The footer logic is now clearer and correctly shows the action buttons
+  // to the recipient of the date proposal.
   const renderFooter = () => {
     if (!dateDetails || !auth0User) return null;
+
     const isRecipient = dateDetails.userTo.userId === auth0User.sub;
-    const isParticipant = dateDetails.userFrom.userId === auth0User.sub || isRecipient;
+    const isSender = dateDetails.userFrom.userId === auth0User.sub;
+    const isParticipant = isSender || isRecipient;
 
-    if (dateDetails.status === 'approved' && isParticipant) {
-      return (
-        <View style={styles.actionContainer}>
-          <TouchableOpacity
-            style={[styles.actionButton, styles.rescheduleButton]}
-            onPress={() => setRescheduleModalVisible(true)}
-            disabled={isSubmitting}>
-            <Text style={styles.actionButtonText}>Reschedule</Text>
-          </TouchableOpacity>
-          <TouchableOpacity
-            style={[styles.actionButton, styles.declineButton]}
-            onPress={handleCancelDate}
-            disabled={isSubmitting}>
-            <Text style={styles.actionButtonText}>Cancel Date</Text>
-          </TouchableOpacity>
-        </View>
-      );
-    }
-
+    // SCENARIO 1: The date is pending, and the current user is the recipient.
+    // ACTION: Show "Accept" and "Decline" buttons.
     if (isRecipient && dateDetails.status === 'pending') {
       return (
         <View style={styles.actionContainer}>
@@ -328,6 +314,29 @@ const DateDetailScreen = () => {
       );
     }
 
+    // SCENARIO 2: The date is already approved, and the current user is a participant.
+    // ACTION: Show "Reschedule" and "Cancel" buttons.
+    if (isParticipant && dateDetails.status === 'approved') {
+      return (
+        <View style={styles.actionContainer}>
+          <TouchableOpacity
+            style={[styles.actionButton, styles.rescheduleButton]}
+            onPress={() => setRescheduleModalVisible(true)}
+            disabled={isSubmitting}>
+            <Text style={styles.actionButtonText}>Reschedule</Text>
+          </TouchableOpacity>
+          <TouchableOpacity
+            style={[styles.actionButton, styles.declineButton]}
+            onPress={handleCancelDate}
+            disabled={isSubmitting}>
+            <Text style={styles.actionButtonText}>Cancel Date</Text>
+          </TouchableOpacity>
+        </View>
+      );
+    }
+
+    // SCENARIO 3 (DEFAULT): For any other status (declined, cancelled, or pending for the sender)
+    // ACTION: Show a simple status info box.
     return (
       <View style={styles.infoBox}>
         <Text style={styles.infoBoxText}>
@@ -456,6 +465,7 @@ const DateDetailScreen = () => {
   );
 };
 
+// Styles remain unchanged
 const styles = StyleSheet.create({
   container: { flex: 1, backgroundColor: screenColors.background },
   loadingContainer: {
@@ -627,7 +637,6 @@ const styles = StyleSheet.create({
     marginBottom: 25,
     textAlign: 'center',
   },
-  // ✅ UPDATED: Modal input styles now use theme colors
   modalInput: {
     backgroundColor: screenColors.inputBackground,
     color: screenColors.textPrimary,
@@ -647,7 +656,6 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     marginHorizontal: 8,
   },
-  // ✅ UPDATED: Modal button styles now use theme colors
   cancelModalButton: { backgroundColor: screenColors.cancelModalButton },
   submitModalButton: { backgroundColor: screenColors.submitModalButton },
 });

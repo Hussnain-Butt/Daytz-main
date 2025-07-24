@@ -1,5 +1,5 @@
 // File: app/(app)/calendar.tsx
-// ✅ COMPLETE AND FINAL UPDATED FILE (WITH LOGOUT ICON AND COMBINED FEEDBACK BUTTON)
+// ✅ COMPLETE AND FINAL UPDATED FILE (REMOVED COIN DISPLAY, PROFILE ICON, PROFESSIONAL TOP BAR ALIGNMENT)
 
 import React, { useState, useCallback, useEffect } from 'react';
 import {
@@ -37,12 +37,10 @@ import { Ionicons } from '@expo/vector-icons';
 
 // Asset Imports
 const LOGO_IMAGE = require('../../assets/brand.png');
-const COIN_ICON = require('../../assets/match.png');
-const NOTIFICATION_ICON = require('../../assets/notification_bell_icon.png');
 const calcHappyIcon = require('../../assets/calc-happy.png');
 const calcErrorIcon = require('../../assets/calc-error.png');
 
-// --- FeedbackModal component updated ---
+// --- FeedbackModal component ---
 const FeedbackModal = ({ visible, onClose, onSubmit }) => {
   const [selectedOutcome, setSelectedOutcome] = useState<DateOutcome | null>(null);
   const [notes, setNotes] = useState('');
@@ -58,7 +56,7 @@ const FeedbackModal = ({ visible, onClose, onSubmit }) => {
       return;
     }
     setIsLoading(true);
-    await onSubmit({ outcome: selectedOutcome, notes: notes });
+    await onSubmit({ outcome: selectedOutcome, notes });
     setIsLoading(false);
   };
 
@@ -91,7 +89,6 @@ const FeedbackModal = ({ visible, onClose, onSubmit }) => {
               <Text style={styles.feedbackButtonText}>Date Went Amazing</Text>
             </TouchableOpacity>
 
-            {/* ✅ COMBINED "STOOD UP / CANCELLED" BUTTON */}
             <TouchableOpacity
               style={[
                 styles.feedbackButton,
@@ -151,12 +148,11 @@ const FeedbackModal = ({ visible, onClose, onSubmit }) => {
   );
 };
 
+// --- BubblePopup component ---
 const BubblePopup = ({ visible, type, title, message, buttonText, onClose }) => {
   if (!visible) return null;
   const isSuccess = type === 'success';
   const imageSource = isSuccess ? calcHappyIcon : calcErrorIcon;
-  const buttonStyle = isSuccess ? styles.successButton : styles.errorButton;
-  const buttonTextStyle = isSuccess ? styles.successButtonText : styles.errorButtonText;
   return (
     <Modal transparent visible={visible} animationType="fade" onRequestClose={onClose}>
       <View style={styles.overlay}>
@@ -165,8 +161,12 @@ const BubblePopup = ({ visible, type, title, message, buttonText, onClose }) => 
           <View style={styles.bubble}>
             <Text style={styles.popupTitle}>{title}</Text>
             <Text style={styles.popupMessage}>{message}</Text>
-            <TouchableOpacity style={[styles.popupButton, buttonStyle]} onPress={onClose}>
-              <Text style={buttonTextStyle}>{buttonText}</Text>
+            <TouchableOpacity
+              style={[styles.popupButton, isSuccess ? styles.successButton : styles.errorButton]}
+              onPress={onClose}>
+              <Text style={isSuccess ? styles.successButtonText : styles.errorButtonText}>
+                {buttonText}
+              </Text>
             </TouchableOpacity>
           </View>
         </View>
@@ -174,7 +174,9 @@ const BubblePopup = ({ visible, type, title, message, buttonText, onClose }) => 
     </Modal>
   );
 };
-const getTypeOfAttraction = (r, s, f) => {
+
+// --- Helper for attraction type ---
+const getTypeOfAttraction = (r: number, s: number, f: number) => {
   const interest = r + s + f;
   if (interest === 0) return 'Not Specified';
   if (s === 0 && r === 0 && f === 0) return 'No Interest';
@@ -189,13 +191,22 @@ const getTypeOfAttraction = (r, s, f) => {
   if (interest === 6) return 'Would Love to Meet';
   return 'My Person!';
 };
-const UpcomingDateItem = ({ item, onPress, onRatePress }) => {
+
+// --- UpcomingDateItem component ---
+const UpcomingDateItem = ({
+  item,
+  onPress,
+  onRatePress,
+}: {
+  item: UpcomingDate;
+  onPress: Function;
+  onRatePress: Function;
+}) => {
   const attractionType = getTypeOfAttraction(
     item.romanticRating,
     item.sexualRating,
     item.friendshipRating
   );
-
   const canGiveFeedback = isPast(parseISO(item.date)) && !item.myOutcome;
   const hasGivenFeedback = !!item.myOutcome;
 
@@ -235,9 +246,10 @@ const UpcomingDateItem = ({ item, onPress, onRatePress }) => {
   );
 };
 
+// --- Main Screen ---
 const CalendarHomeScreen = () => {
   const { auth0User, logout, isReady: isAuthReady, isLoading: isAuthLoading } = useAuth();
-  const { tokenBalance, userProfile } = useUserStore();
+  const { userProfile } = useUserStore();
   const router = useRouter();
 
   const [isCalendarLoading, setIsCalendarLoading] = useState(true);
@@ -255,9 +267,8 @@ const CalendarHomeScreen = () => {
     message: '',
   });
 
-  const showPopup = (title: string, message: string, type: 'success' | 'error' = 'error') => {
-    setPopupState({ visible: true, title, message, type });
-  };
+  const showPopup = (title: string, message: string, type: 'success' | 'error' = 'error') =>
+    setPopupState({ visible: true, type, title, message });
 
   const fetchAllScreenData = useCallback(async () => {
     if (!auth0User?.sub) {
@@ -269,25 +280,18 @@ const CalendarHomeScreen = () => {
       setIsCalendarLoading(true);
       setIsUpcomingLoading(true);
     }
-
     try {
-      const [calendarResponse, upcomingResponse, countResponse] = await Promise.all([
+      const [calRes, upRes, countRes] = await Promise.all([
         getCalendarDaysByUserId(),
         getUpcomingDates(),
         getUnreadNotificationsCount(),
       ]);
-
-      const initialDates = upcomingResponse.data.map((d) => ({
-        ...d,
-        romanticRating: 0,
-        sexualRating: 0,
-        friendshipRating: 0,
-      }));
-
-      setCalendarData(calendarResponse.data);
-      setUpcomingDates(initialDates);
-      setUnreadCount(countResponse.data.unreadCount);
-    } catch (apiError: any) {
+      setCalendarData(calRes.data);
+      setUpcomingDates(
+        upRes.data.map((d) => ({ ...d, romanticRating: 0, sexualRating: 0, friendshipRating: 0 }))
+      );
+      setUnreadCount(countRes.data.unreadCount);
+    } catch {
       showPopup('Load Failed', 'Could not load your calendar data. Please try again.', 'error');
     } finally {
       setIsCalendarLoading(false);
@@ -301,112 +305,75 @@ const CalendarHomeScreen = () => {
       if (isAuthReady && !isAuthLoading) fetchAllScreenData();
     }, [isAuthReady, isAuthLoading, fetchAllScreenData])
   );
+
   useEffect(() => {
-    const fetchAttractionsForDates = async () => {
-      if (
-        upcomingDates.length === 0 ||
-        !userProfile?.userId ||
-        upcomingDates.every(
-          (d) => d.romanticRating > 0 || d.sexualRating > 0 || d.friendshipRating > 0
-        )
-      ) {
-        return;
-      }
-
-      const attractionPromises = upcomingDates.map((date) => {
-        const myId = userProfile.userId;
-        const otherId = date.otherUser.userId;
-
-        let userFrom, userTo;
-        if (date.userFrom === myId) {
-          userFrom = myId;
-          userTo = otherId;
-        } else {
-          userFrom = otherId;
-          userTo = myId;
-        }
-
+    const loadAttractions = async () => {
+      if (!userProfile?.userId || upcomingDates.length === 0) return;
+      const promises = upcomingDates.map((d) => {
+        const from = d.userFrom === userProfile.userId ? userProfile.userId : d.otherUser.userId;
+        const to = from === userProfile.userId ? d.otherUser.userId : userProfile.userId;
         return getAttractionByUserFromUserToAndDate(
-          userFrom,
-          userTo,
-          format(parseISO(date.date), 'yyyy-MM-dd')
+          from,
+          to,
+          format(parseISO(d.date), 'yyyy-MM-dd')
         ).catch(() => null);
       });
-
-      const attractionResults = await Promise.all(attractionPromises);
-
-      const datesWithAttractions = upcomingDates.map((date, index) => {
-        const attractionData = attractionResults[index]?.data;
-        if (attractionData) {
-          return {
-            ...date,
-            romanticRating: attractionData.romanticRating || 0,
-            sexualRating: attractionData.sexualRating || 0,
-            friendshipRating: attractionData.friendshipRating || 0,
-          };
-        }
-        return date;
-      });
-
-      setUpcomingDates(datesWithAttractions);
+      const results = await Promise.all(promises);
+      setUpcomingDates(
+        upcomingDates.map((d, i) => {
+          const data = results[i]?.data;
+          return data
+            ? {
+                ...d,
+                romanticRating: data.romanticRating || 0,
+                sexualRating: data.sexualRating || 0,
+                friendshipRating: data.friendshipRating || 0,
+              }
+            : d;
+        })
+      );
     };
-
-    fetchAttractionsForDates();
-  }, [upcomingDates, userProfile?.userId]);
+    loadAttractions();
+  }, [upcomingDates, userProfile]);
 
   const onRefresh = useCallback(() => {
     setIsRefreshing(true);
     if (isAuthReady) fetchAllScreenData();
     else setIsRefreshing(false);
   }, [isAuthReady, fetchAllScreenData]);
+
   const handleFeedbackSubmit = async (feedback: { outcome: DateOutcome; notes?: string }) => {
     if (!selectedDateForFeedback) return;
-
     try {
-      const response = await addDateFeedback(selectedDateForFeedback.dateId, feedback);
-
-      setUpcomingDates((currentDates) =>
-        currentDates.map((d) =>
+      const res = await addDateFeedback(selectedDateForFeedback.dateId, feedback);
+      setUpcomingDates(
+        upcomingDates.map((d) =>
           d.dateId === selectedDateForFeedback.dateId
-            ? {
-                ...d,
-                myOutcome: response.data.outcome,
-                myNotes: response.data.notes,
-              }
+            ? { ...d, myOutcome: res.data.outcome, myNotes: res.data.notes }
             : d
         )
       );
-
       setFeedbackModalVisible(false);
       setSelectedDateForFeedback(null);
       showPopup('Thank You!', 'Your feedback has been submitted.', 'success');
-    } catch (error) {
-      console.error('Failed to submit feedback', error);
+    } catch {
       showPopup('Submission Failed', 'Could not submit your feedback. Please try again.', 'error');
     }
   };
 
   const handleDateItemPress = (item: UpcomingDate) => {
-    if (!item.updatedAt) {
-      showPopup('Error', 'Cannot verify date status. Please refresh.', 'error');
-      return;
-    }
+    if (!item.updatedAt)
+      return showPopup('Error', 'Cannot verify date status. Please refresh.', 'error');
     try {
-      const approvalTime = parseISO(item.updatedAt);
-      const currentTime = new Date();
-      const hours72_in_ms = 72 * 60 * 60 * 1000;
-      const differenceInMs = currentTime.getTime() - approvalTime.getTime();
-      if (differenceInMs < hours72_in_ms) {
-        router.push(`/(app)/dates/${item.dateId}`);
-      } else {
+      const diff = new Date().getTime() - parseISO(item.updatedAt).getTime();
+      if (diff < 72 * 3600000) router.push(`/(app)/dates/${item.dateId}`);
+      else
         showPopup(
           'Date Locked',
           'This date was approved more than 72 hours ago and can no longer be modified.',
           'error'
         );
-      }
-    } catch (e) {
-      console.error('Error parsing date for 72-hour check:', e);
+    } catch {
       showPopup('Error', 'An unexpected error occurred while checking the date.', 'error');
     }
   };
@@ -416,7 +383,7 @@ const CalendarHomeScreen = () => {
     setFeedbackModalVisible(true);
   };
 
-  if (!isAuthReady || isAuthLoading) {
+  if (!isAuthReady || isAuthLoading)
     return (
       <SafeAreaView style={styles.safeArea}>
         <View style={styles.loadingContainer}>
@@ -424,27 +391,16 @@ const CalendarHomeScreen = () => {
         </View>
       </SafeAreaView>
     );
-  }
 
   return (
     <SafeAreaView style={styles.safeArea}>
       <View style={styles.topHeader}>
         <View style={styles.headerGroupLeft}>
           <Image source={LOGO_IMAGE} style={styles.logoImage} />
-          <View style={styles.tokenDisplayContainer}>
-            <Image source={COIN_ICON} style={styles.tokenIcon} />
-            <Text style={styles.tokenTextValue}>
-              {tokenBalance !== null ? (
-                `${tokenBalance} ${tokenBalance === 1 ? 'coin' : 'coins'}`
-              ) : (
-                <ActivityIndicator size="small" color={colors.White} />
-              )}
-            </Text>
-          </View>
         </View>
         <View style={styles.headerGroupRight}>
           <TouchableOpacity style={styles.iconButton} onPress={() => router.push('/(app)/profile')}>
-            <Ionicons name="home-outline" size={26} color={colors.White} />
+            <Ionicons name="person-outline" size={24} color={colors.White} />
           </TouchableOpacity>
           <TouchableOpacity
             style={styles.iconButton}
@@ -452,7 +408,7 @@ const CalendarHomeScreen = () => {
               setUnreadCount(0);
               router.push('/(app)/notifications');
             }}>
-            <Ionicons name="notifications-outline" size={25} color={colors.White} />
+            <Ionicons name="notifications-outline" size={24} color={colors.White} />
             {unreadCount > 0 && (
               <View style={styles.notificationBadge}>
                 <Text style={styles.notificationBadgeText}>{unreadCount}</Text>
@@ -460,11 +416,10 @@ const CalendarHomeScreen = () => {
             )}
           </TouchableOpacity>
           <TouchableOpacity style={styles.iconButton} onPress={logout}>
-            <Ionicons name="log-out-outline" size={28} color={colors.PinkPrimary} />
+            <Ionicons name="log-out-outline" size={24} color={colors.PinkPrimary} />
           </TouchableOpacity>
         </View>
       </View>
-
       <ScrollView
         contentContainerStyle={{ paddingBottom: 40 }}
         refreshControl={
@@ -489,14 +444,14 @@ const CalendarHomeScreen = () => {
             <ActivityIndicator color={colors.White} style={{ marginTop: 20 }} />
           ) : upcomingDates.length > 0 ? (
             <View style={styles.listContainer}>
-              {upcomingDates.map((item, index) => (
+              {upcomingDates.map((item, idx) => (
                 <React.Fragment key={item.dateId}>
                   <UpcomingDateItem
                     item={item}
                     onPress={handleDateItemPress}
                     onRatePress={handleRatePress}
                   />
-                  {index < upcomingDates.length - 1 && <View style={styles.separator} />}
+                  {idx < upcomingDates.length - 1 && <View style={styles.separator} />}
                 </React.Fragment>
               ))}
             </View>
@@ -505,7 +460,6 @@ const CalendarHomeScreen = () => {
           )}
         </View>
       </ScrollView>
-
       <FeedbackModal
         visible={isFeedbackModalVisible}
         onClose={() => setFeedbackModalVisible(false)}
@@ -513,7 +467,7 @@ const CalendarHomeScreen = () => {
       />
       <BubblePopup
         visible={popupState.visible}
-        type={popupState.type}
+        type={popupState.type as 'success' | 'error'}
         title={popupState.title}
         message={popupState.message}
         buttonText="OK"
@@ -535,27 +489,16 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'space-between',
     paddingHorizontal: 15,
-    paddingBottom: 15,
-    height: 60,
+    paddingVertical: 10,
   },
   headerGroupLeft: { flexDirection: 'row', alignItems: 'center' },
   headerGroupRight: { flexDirection: 'row', alignItems: 'center' },
-  logoImage: { width: 80, height: 28, resizeMode: 'contain', marginRight: 15 },
-  tokenDisplayContainer: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    backgroundColor: colors.Black || '#000000',
-    borderRadius: 20,
-    paddingHorizontal: 12,
-    paddingVertical: 6,
-  },
-  tokenIcon: { width: 20, height: 20, marginRight: 8 },
-  tokenTextValue: { color: colors.White || '#FFFFFF', fontSize: 14, fontWeight: 'bold' },
-  iconButton: { paddingHorizontal: 8 },
+  logoImage: { width: 100, height: 30, resizeMode: 'contain' },
+  iconButton: { marginLeft: 15 },
   notificationBadge: {
     position: 'absolute',
-    top: 0,
-    right: 2,
+    top: -4,
+    right: -4,
     backgroundColor: colors.Red || '#F46A6A',
     borderRadius: 9,
     width: 18,
@@ -563,22 +506,18 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
     alignItems: 'center',
     borderWidth: 1,
-    borderColor: colors.Background || '#2D2D2D',
+    borderColor: colors.GreyDark || '#1E1E1E',
   },
   notificationBadgeText: { color: colors.White || '#FFFFFF', fontSize: 10, fontWeight: 'bold' },
-  calendarGridContainer: { paddingHorizontal: 15 },
-  upcomingSection: { marginTop: 30, paddingHorizontal: 15 },
+  calendarGridContainer: { padding: 15 },
+  upcomingSection: { marginTop: 20, paddingHorizontal: 15 },
   upcomingTitle: {
     fontSize: 22,
     fontWeight: 'bold',
     color: colors.White || '#FFFFFF',
     marginBottom: 10,
   },
-  listContainer: {
-    backgroundColor: colors.GreyDark || '#1E1E1E',
-    borderRadius: 12,
-    paddingHorizontal: 10,
-  },
+  listContainer: { backgroundColor: colors.GreyDark || '#1E1E1E', borderRadius: 12, padding: 10 },
   separator: { height: 1, backgroundColor: colors.LightBackground || '#3F3F3F' },
   noUpcomingText: {
     color: colors.GreyBackground || '#AAAAAA',
@@ -586,12 +525,12 @@ const styles = StyleSheet.create({
     marginTop: 20,
     fontSize: 16,
   },
-  upcomingItem: { flexDirection: 'row', alignItems: 'center', paddingVertical: 15 },
-  upcomingItemDetails: { flex: 1, marginLeft: 12, gap: 2 },
-  upcomingItemName: { fontSize: 16, fontWeight: 'bold', color: colors.White || '#FFFFFF' },
+  upcomingItem: { flexDirection: 'row', alignItems: 'center', paddingVertical: 12 },
+  upcomingItemDetails: { flex: 1, marginLeft: 12 },
+  upcomingItemName: { fontSize: 16, fontWeight: '600', color: colors.White || '#FFFFFF' },
   upcomingItemInfo: { fontSize: 13, color: colors.Grey || '#9CA4A4' },
-  upcomingItemTime: { fontSize: 13, color: colors.Grey || '#9CA4A4', fontWeight: '500' },
-  attractionTypeContainer: { flexDirection: 'row', alignItems: 'center', marginTop: 6 },
+  upcomingItemTime: { fontSize: 13, color: colors.Grey || '#9CA4A4' },
+  attractionTypeContainer: { flexDirection: 'row', alignItems: 'center', marginTop: 4 },
   attractionTypeText: {
     marginLeft: 6,
     fontSize: 13,
@@ -602,10 +541,10 @@ const styles = StyleSheet.create({
   statusContainer: {
     flexDirection: 'row',
     alignItems: 'center',
-    backgroundColor: 'rgba(58, 219, 118, 0.15)', // Using a static color for Success background
+    backgroundColor: 'rgba(58, 219, 118, 0.15)',
     borderRadius: 12,
-    paddingVertical: 6,
-    paddingHorizontal: 10,
+    paddingVertical: 4,
+    paddingHorizontal: 8,
   },
   statusText: {
     color: colors.Success || '#3ADB76',
@@ -615,7 +554,7 @@ const styles = StyleSheet.create({
   },
   rateButton: {
     marginTop: 8,
-    backgroundColor: colors.PinkPrimary,
+    backgroundColor: colors.PinkPrimary || '#ff149d',
     borderRadius: 10,
     paddingVertical: 5,
     paddingHorizontal: 12,
@@ -623,7 +562,7 @@ const styles = StyleSheet.create({
   rateButtonText: { color: colors.White || '#FFFFFF', fontSize: 12, fontWeight: 'bold' },
   feedbackSentText: {
     marginTop: 8,
-    color: colors.GoldPrimary,
+    color: colors.GoldPrimary || '#FFDB5C',
     fontSize: 12,
     fontStyle: 'italic',
   },
@@ -632,16 +571,16 @@ const styles = StyleSheet.create({
     backgroundColor: 'rgba(0, 0, 0, 0.7)',
     justifyContent: 'center',
     alignItems: 'center',
-    paddingHorizontal: 20,
-  },
-  popupContainer: { alignItems: 'center', width: '100%', maxWidth: 350 },
-  popupImage: { width: 220, height: 220, resizeMode: 'contain', zIndex: 1, marginBottom: -80 },
-  bubble: {
-    width: '90%',
-    backgroundColor: colors.White || '#FFFFFF',
-    borderRadius: 25,
     padding: 20,
-    paddingTop: 90,
+  },
+  popupContainer: { alignItems: 'center', width: '90%', maxWidth: 350 },
+  popupImage: { width: 220, height: 220, resizeMode: 'contain', marginBottom: -80 },
+  bubble: {
+    width: '100%',
+    backgroundColor: colors.White || '#FFFFFF',
+    borderRadius: 20,
+    padding: 20,
+    paddingTop: 100,
     alignItems: 'center',
     shadowColor: '#000',
     shadowOffset: { width: 0, height: 4 },
@@ -650,38 +589,35 @@ const styles = StyleSheet.create({
     elevation: 8,
   },
   popupTitle: {
-    fontSize: 28,
+    fontSize: 26,
     fontWeight: 'bold',
     color: colors.Black || '#000000',
     textAlign: 'center',
-    marginBottom: 15,
+    marginBottom: 10,
   },
   popupMessage: {
-    fontSize: 17,
+    fontSize: 16,
     color: colors.LightBlack || '#222B45',
     textAlign: 'center',
-    marginBottom: 25,
-    lineHeight: 24,
+    marginBottom: 20,
+    lineHeight: 22,
   },
   popupButton: {
     borderRadius: 20,
     paddingVertical: 10,
-    paddingHorizontal: 40,
+    paddingHorizontal: 30,
     alignItems: 'center',
   },
   errorButton: { backgroundColor: colors.PinkPrimary || '#ff149d' },
   successButton: { backgroundColor: colors.GoldPrimary || '#FFDB5C' },
   errorButtonText: { color: colors.White || '#FFFFFF', fontSize: 15, fontWeight: 'bold' },
   successButtonText: { color: colors.Black || '#000000', fontSize: 15, fontWeight: 'bold' },
-
-  // --- MODAL STYLES (UPDATED) ---
   modalOverlay: { flex: 1, backgroundColor: 'rgba(0, 0, 0, 0.8)', justifyContent: 'flex-end' },
   modalContainer: {
     backgroundColor: colors.GreyDark || '#1E1E1E',
     borderTopLeftRadius: 20,
     borderTopRightRadius: 20,
     padding: 20,
-    paddingBottom: 40,
   },
   modalTitle: {
     color: colors.White || '#FFFFFF',
@@ -693,31 +629,27 @@ const styles = StyleSheet.create({
     color: colors.GreyBackground || '#AAAAAA',
     fontSize: 14,
     textAlign: 'center',
-    marginTop: 8,
-    marginBottom: 25,
+    marginVertical: 10,
   },
   feedbackOptionsContainer: { gap: 10, marginBottom: 20 },
   feedbackButton: {
-    paddingVertical: 16,
+    paddingVertical: 14,
     borderRadius: 12,
-    borderWidth: 2,
-    borderColor: 'transparent',
+    borderWidth: 0,
     alignItems: 'center',
     justifyContent: 'center',
-    transition: 'transform 0.2s ease-in-out',
   },
   fullWidthButton: { width: '100%' },
   amazingButton: { backgroundColor: colors.TealPrimary || '#00E0FF' },
-  // ✅ NEW STYLE FOR THE COMBINED BUTTON
   noShowButton: { backgroundColor: '#FFA500' },
-  otherButton: { backgroundColor: '#FF4500' }, // Red-Orange as per image
-  feedbackButtonText: { color: colors.White || '#FFFFFF', fontWeight: 'bold', textAlign: 'center' },
-  selectedButton: { borderColor: colors.White || '#FFFFFF', transform: [{ scale: 1.02 }] },
+  otherButton: { backgroundColor: '#FF4500' },
+  feedbackButtonText: { color: colors.White || '#FFFFFF', fontWeight: 'bold' },
+  selectedButton: { transform: [{ scale: 1.02 }] },
   notesInput: {
     backgroundColor: colors.LightBackground || '#3F3F3F',
     color: colors.White || '#FFFFFF',
     borderRadius: 10,
-    padding: 15,
+    padding: 12,
     height: 100,
     textAlignVertical: 'top',
     fontSize: 16,
@@ -726,7 +658,7 @@ const styles = StyleSheet.create({
   modalActions: { flexDirection: 'row', justifyContent: 'space-between', gap: 10 },
   closeButton: {
     backgroundColor: '#4A4A4A',
-    paddingVertical: 16,
+    paddingVertical: 14,
     borderRadius: 12,
     flex: 1,
     alignItems: 'center',
@@ -734,7 +666,7 @@ const styles = StyleSheet.create({
   closeButtonText: { color: colors.White || '#FFFFFF', fontWeight: 'bold', fontSize: 16 },
   submitButton: {
     backgroundColor: colors.PinkPrimary || '#ff149d',
-    paddingVertical: 16,
+    paddingVertical: 14,
     borderRadius: 12,
     flex: 1,
     alignItems: 'center',

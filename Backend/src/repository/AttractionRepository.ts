@@ -1,9 +1,9 @@
 // File: src/repository/AttractionRepository.ts
-// ✅ COMPLETE AND FINAL CORRECTED CODE
+// ✅ COMPLETE AND FINAL UPDATED CODE
 
 import pool from '../db'
 import { Attraction, CreateAttractionInternalPayload } from '../types/Attraction'
-import { Pool, PoolClient } from 'pg' // Import both Pool and PoolClient
+import { Pool, PoolClient } from 'pg'
 import * as humps from 'humps'
 
 const mapRowToAttraction = (row: any): Attraction | null => {
@@ -31,7 +31,8 @@ class AttractionRepository {
   async createAttraction(
     payload: CreateAttractionInternalPayload,
     client: PoolClient | null = null,
-  ): Promise<Attraction | null> {
+  ): Promise<Attraction> {
+    // ✅ FIX: Return type is now guaranteed to be Attraction
     const db = client || pool
     const query = `
       INSERT INTO attractions 
@@ -53,7 +54,14 @@ class AttractionRepository {
       payload.emotional,
     ]
     const { rows } = await db.query(query, values)
-    return rows.length > 0 ? mapRowToAttraction(rows[0]) : null
+
+    // ✅ FIX: If INSERT...RETURNING * fails, the rows array will be empty.
+    // We must throw a clear error instead of returning null.
+    if (rows.length === 0) {
+      throw new Error('Database failed to create and return the attraction record.')
+    }
+    // The '!' tells TypeScript that we are certain mapRowToAttraction will not return null here.
+    return mapRowToAttraction(rows[0])!
   }
 
   async getAttraction(
@@ -72,7 +80,8 @@ class AttractionRepository {
     attractionId: number,
     updates: Partial<Attraction>,
     client: PoolClient | null = null,
-  ): Promise<Attraction | null> {
+  ): Promise<Attraction> {
+    // ✅ FIX: Return type is now guaranteed to be Attraction
     const db = client || pool
     const fieldsToUpdate: string[] = []
     const values: any[] = []
@@ -86,8 +95,15 @@ class AttractionRepository {
       }
     }
 
+    // If there's nothing to update, just fetch and return the current state.
     if (fieldsToUpdate.length === 0) {
-      return this.getAttractionById(attractionId, db)
+      const existingAttraction = await this.getAttractionById(attractionId, db)
+      if (!existingAttraction) {
+        throw new Error(
+          `Attraction with ID ${attractionId} not found, cannot perform an empty update.`,
+        )
+      }
+      return existingAttraction
     }
 
     fieldsToUpdate.push(`updated_at = NOW()`)
@@ -97,11 +113,17 @@ class AttractionRepository {
       ', ',
     )} WHERE attraction_id = $${queryIndex} RETURNING *;`
     const { rows } = await db.query(query, values)
-    return rows.length > 0 ? mapRowToAttraction(rows[0]) : null
+
+    // ✅ FIX: If the UPDATE fails to find the row, it will return nothing.
+    // Throw an error so the calling service knows the update failed.
+    if (rows.length === 0) {
+      throw new Error(
+        `Database failed to update attraction with ID ${attractionId}. It might not exist.`,
+      )
+    }
+    return mapRowToAttraction(rows[0])!
   }
 
-  // ✅ --- THIS IS THE FIX ---
-  // The type of the 'db' parameter has been corrected to accept either a PoolClient or a Pool.
   async getAttractionById(
     attractionId: number,
     db: PoolClient | Pool | null = null,
@@ -112,7 +134,6 @@ class AttractionRepository {
     return rows.length > 0 ? mapRowToAttraction(rows[0]) : null
   }
 
-  // --- No changes to the functions below ---
   async getAttractionsByUserFrom(userFrom: string): Promise<Attraction[]> {
     const query = `SELECT * FROM attractions WHERE user_from = $1 ORDER BY date DESC;`
     const { rows } = await pool.query(query, [userFrom])

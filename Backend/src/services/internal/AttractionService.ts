@@ -1,12 +1,8 @@
 // File: src/services/internal/AttractionService.ts
-// ✅ COMPLETE AND FINAL CORRECTED CODE
+// ✅ COMPLETE AND FINAL UPDATED CODE
 
-// ✅✅✅ FIX: Path ko theek kiya gaya hai ('../' se '../../') ✅✅✅
-import pool from '../../db'
-import { Attraction, CreateAttractionInternalPayload } from '../../types/Attraction'
 import { Pool, PoolClient } from 'pg'
-import * as humps from 'humps'
-// ✅✅✅ FIX: Path ko theek kiya gaya hai ('../' se '../../') ✅✅✅
+import { Attraction, CreateAttractionInternalPayload } from '../../types/Attraction'
 import AttractionRepository from '../../repository/AttractionRepository'
 
 class AttractionService {
@@ -17,6 +13,7 @@ class AttractionService {
     console.log('[AttractionService] AttractionRepository instance created.')
   }
 
+  // ✅ FIX: The return type is now guaranteed to be `Attraction`. No more `| null`.
   async createOrUpdateAttraction(
     payload: CreateAttractionInternalPayload,
     client: PoolClient | null = null,
@@ -27,11 +24,14 @@ class AttractionService {
       payload.date,
       client,
     )
+
     if (existingAttraction) {
       console.log(
         `[AttractionService] Updating existing attraction ID: ${existingAttraction.attractionId}`,
       )
-      const updatedAttraction = await this.attractionRepository.updateAttraction(
+      // Since the repository now throws on failure, we don't need a null check.
+      // The return value is guaranteed to be an Attraction object.
+      return this.attractionRepository.updateAttraction(
         existingAttraction.attractionId,
         {
           romanticRating: payload.romanticRating,
@@ -40,15 +40,12 @@ class AttractionService {
         },
         client,
       )
-      if (!updatedAttraction) throw new Error('Failed to update attraction.')
-      return updatedAttraction
     } else {
       console.log(
         `[AttractionService] Creating new attraction from ${payload.userFrom} to ${payload.userTo}`,
       )
-      const newAttraction = await this.attractionRepository.createAttraction(payload, client)
-      if (!newAttraction) throw new Error('Failed to create attraction.')
-      return newAttraction
+      // This will also return an Attraction object or throw an error.
+      return this.attractionRepository.createAttraction(payload, client)
     }
   }
 
@@ -67,17 +64,12 @@ class AttractionService {
     const s2 = attr2.sexualRating ?? 0
     const f2 = attr2.friendshipRating ?? 0
 
-    // Rule: Mismatch if one wants romance and the other doesn't.
     if ((r1 > 0 && r2 === 0) || (r1 === 0 && r2 > 0)) {
       return { isMatch: false, firstMessageRightsHolderId: null }
     }
-
-    // Rule: Mismatch if one wants sexual and the other doesn't.
     if ((s1 > 0 && s2 === 0) || (s1 === 0 && s2 > 0)) {
       return { isMatch: false, firstMessageRightsHolderId: null }
     }
-
-    // Rule: Mismatch if one is ONLY friends, but the other wants more.
     if (r1 === 0 && s1 === 0 && f1 > 0 && (r2 > 0 || s2 > 0)) {
       return { isMatch: false, firstMessageRightsHolderId: null }
     }
@@ -85,7 +77,6 @@ class AttractionService {
       return { isMatch: false, firstMessageRightsHolderId: null }
     }
 
-    // If all checks pass, it's a match.
     const sum1 = r1 + s1 + f1
     const sum2 = r2 + s2 + f2
     let firstMessageRightsHolderId: string | null = null
@@ -96,7 +87,6 @@ class AttractionService {
       } else if (sum2 < sum1) {
         firstMessageRightsHolderId = attr2.userFrom
       } else {
-        // Randomly assign if sums are equal
         firstMessageRightsHolderId = Math.random() < 0.5 ? attr1.userFrom : attr2.userFrom
       }
     }

@@ -6,6 +6,7 @@ import { DateObject as DateType, CreateDateInternal, UpcomingDate } from '../typ
 import { PoolClient } from 'pg'
 import * as humps from 'humps'
 
+// Helper function remains the same
 const mapRowToDate = (row: any): DateType | null => {
   if (!row) return null
   const camelized = humps.camelizeKeys(row)
@@ -25,6 +26,35 @@ const mapRowToDate = (row: any): DateType | null => {
 }
 
 class DatesRepository {
+  // ✅ --- THIS IS THE FIX ---
+  // The `createDateEntry` method now accepts an optional `client` argument.
+  async createDateEntry(
+    dateEntry: CreateDateInternal,
+    client: PoolClient | null = null,
+  ): Promise<DateType> {
+    // If a client is passed, use it; otherwise, use the main pool.
+    const db = client || pool
+    const query = `INSERT INTO dates (date, time, user_from, user_to, user_from_approved, user_to_approved, location_metadata, status) VALUES ($1, $2, $3, $4, $5, $6, $7, $8) RETURNING *`
+    const values = [
+      dateEntry.date,
+      dateEntry.time,
+      dateEntry.userFrom,
+      dateEntry.userTo,
+      dateEntry.userFromApproved,
+      dateEntry.userToApproved,
+      dateEntry.locationMetadata ? JSON.stringify(dateEntry.locationMetadata) : null,
+      dateEntry.status,
+    ]
+    const { rows } = await db.query(query, values)
+    const newDate = mapRowToDate(rows[0])
+    if (!newDate) {
+      throw new Error('Date creation failed, repository did not return a date object.')
+    }
+    return newDate
+  }
+
+  // --- Other methods remain unchanged ---
+
   async getDateEntryByIdWithUserDetails(dateId: number): Promise<any | null> {
     const query = `
       SELECT 
@@ -41,15 +71,13 @@ class DatesRepository {
     return humps.camelizeKeys(rows[0])
   }
 
-  // ✅ THIS QUERY IS UPDATED
   async getUpcomingDatesByUserId(userId: string): Promise<UpcomingDate[]> {
-    console.log(`[DatesRepository] Fetching upcoming dates for user: ${userId}`)
     const query = `
       SELECT
         d.date_id as "dateId", 
         d.date, 
         d.time,
-        d.updated_at as "updatedAt", -- ✅ YEH LINE ADD KI GAYI HAI
+        d.updated_at as "updatedAt",
         d.location_metadata as "locationMetadata",
         d.user_from as "userFrom",
         d.user_to as "userTo",
@@ -69,38 +97,8 @@ class DatesRepository {
       AND d.status = 'approved'
       ORDER BY d.date DESC, d.time DESC;
     `
-    try {
-      const { rows } = await pool.query(query, [userId])
-      console.log(`[DatesRepository] SQL query found ${rows.length} dates for user ${userId}.`)
-      return rows.map((row) => humps.camelizeKeys(row)) as UpcomingDate[]
-    } catch (error) {
-      console.error(`[DatesRepository] Error executing getUpcomingDatesByUserId query:`, error)
-      throw error
-    }
-  }
-
-  async createDateEntry(
-    dateEntry: CreateDateInternal,
-    client: PoolClient | null = null,
-  ): Promise<DateType> {
-    const db = client || pool
-    const query = `INSERT INTO dates (date, time, user_from, user_to, user_from_approved, user_to_approved, location_metadata, status) VALUES ($1, $2, $3, $4, $5, $6, $7, $8) RETURNING *`
-    const values = [
-      dateEntry.date,
-      dateEntry.time,
-      dateEntry.userFrom,
-      dateEntry.userTo,
-      dateEntry.userFromApproved,
-      dateEntry.userToApproved,
-      dateEntry.locationMetadata ? JSON.stringify(dateEntry.locationMetadata) : null,
-      dateEntry.status,
-    ]
-    const { rows } = await db.query(query, values)
-    const newDate = mapRowToDate(rows[0])
-    if (!newDate) {
-      throw new Error('Date creation failed, repository did not return a date object.')
-    }
-    return newDate
+    const { rows } = await pool.query(query, [userId])
+    return rows.map((row) => humps.camelizeKeys(row)) as UpcomingDate[]
   }
 
   async getDateEntryById(dateId: number): Promise<DateType | null> {

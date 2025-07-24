@@ -23,7 +23,6 @@ export const createDateHandler = asyncHandler(
     if (!proposerUserId) return res.status(401).json({ message: 'Unauthorized.' })
     if (!date || !userTo) return res.status(400).json({ message: 'Date and userTo are required.' })
 
-    // Ratings ko optional nahi rehne dena, 0 default value hai
     if (
       typeof romanticRating !== 'number' ||
       typeof sexualRating !== 'number' ||
@@ -49,15 +48,14 @@ export const createDateHandler = asyncHandler(
     }
 
     try {
-      // createFullDateProposal ko poora payload pass karein
       const createdDate = await datesService.createFullDateProposal(proposerUserId, payload)
-      // Notification ab service ke andar se bheja ja raha hai, yahan se call remove kar dein.
       return res.status(201).json(createdDate)
     } catch (error: any) {
       console.error('[CreateDateHandler] Error during full proposal creation:', error.message)
-      // ✅✅✅ CHANGE: Specific error handling for no match ✅✅✅
+
+      // ✅✅✅ CHANGE: Respond with a structured error object for the frontend ✅✅✅
       if (error.code === 'NOT_A_MATCH') {
-        return res.status(409).json({ message: "It's not a match. Date proposal was not sent." })
+        return res.status(409).json({ code: error.code, message: error.message })
       }
       if (error.code === 'INSUFFICIENT_FUNDS')
         return res.status(402).json({ message: 'Insufficient tokens to express attraction.' })
@@ -67,6 +65,8 @@ export const createDateHandler = asyncHandler(
     }
   },
 )
+
+// --- Baqi handlers mein koi tabdeeli nahi ---
 
 export const updateDateHandler = asyncHandler(
   async (req: CustomRequest, res: Response, next: NextFunction) => {
@@ -87,7 +87,6 @@ export const updateDateHandler = asyncHandler(
         return res.status(404).json({ message: 'Date not found.' })
       }
 
-      // Both users can reschedule or cancel, but only the recipient can approve/decline.
       const isParticipant =
         dateToUpdate.userFrom === updaterUserId || dateToUpdate.userTo === updaterUserId
       const isRecipient = dateToUpdate.userTo === updaterUserId
@@ -101,7 +100,6 @@ export const updateDateHandler = asyncHandler(
       const updatePayload: Partial<DateType> = {}
       let notificationAction: 'RESPONSE' | 'RESCHEDULE' | null = null
 
-      // --- Logic for Responding (Accept/Decline) ---
       if (status && ['approved', 'declined'].includes(status)) {
         if (!isRecipient) {
           return res.status(403).json({ message: 'Only the recipient can respond to a date.' })
@@ -112,12 +110,10 @@ export const updateDateHandler = asyncHandler(
         updatePayload.status = status as 'approved' | 'declined'
         if (status === 'approved') {
           updatePayload.userToApproved = true
-          updatePayload.userFromApproved = true // Assuming proposer is always approved
+          updatePayload.userFromApproved = true
         }
         notificationAction = 'RESPONSE'
-      }
-      // --- Logic for Rescheduling ---
-      else if (date || time || locationMetadata) {
+      } else if (date || time || locationMetadata) {
         if (dateToUpdate.status !== 'approved') {
           return res.status(400).json({ message: 'Only approved dates can be rescheduled.' })
         }
@@ -134,7 +130,6 @@ export const updateDateHandler = asyncHandler(
       const otherUserId =
         dateToUpdate.userFrom === updaterUserId ? dateToUpdate.userTo : dateToUpdate.userFrom
 
-      // Send appropriate notification
       if (updatedDate && otherUserId) {
         if (notificationAction === 'RESPONSE') {
           await notificationService.sendDateResponseNotification(
