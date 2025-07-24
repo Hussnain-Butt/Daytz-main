@@ -1,3 +1,5 @@
+
+
 {
   "name": "daytz-be",
   "version": "1.0.0",
@@ -9,7 +11,10 @@
     "start": "node dist/index.js",
     "dev": "nodemon src/index.ts",
     "migrate": "node dist/scripts/migrate.js",
-    "railway-start": "npm run build && npm run migrate && npm run start"
+  
+    "railway-start": "npm run build && npm run start",
+
+    "migrate:prod": "npm run build && npm run migrate"
   },
   "keywords": [],
   "author": "",
