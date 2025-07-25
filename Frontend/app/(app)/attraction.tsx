@@ -8,7 +8,6 @@ import {
   TouchableOpacity,
   ScrollView,
   ActivityIndicator,
-  Alert,
   Image,
   StatusBar as RNStatusBar,
   Platform,
@@ -42,8 +41,7 @@ const TOKEN_ICON = require('../../assets/match.png');
 const calcHappyIcon = require('../../assets/calc-happy.png');
 const calcErrorIcon = require('../../assets/calc-error.png');
 
-// (Rest of the constants and components are the same)
-// ...
+// --- CONSTANTS AND HELPER COMPONENTS (No changes) ---
 const ROMANTIC_LABELS: Record<number, string> = {
   0: 'None',
   1: 'Dinner',
@@ -83,6 +81,7 @@ const screenColors = {
 const MIN_RATING = 0,
   MAX_RATING = 3,
   RATING_STEP = 1;
+
 const BubblePopup = ({ visible, type, title, message, buttonText, onClose }) => {
   if (!visible) return null;
   const isSuccess = type === 'success';
@@ -126,8 +125,6 @@ export default function AttractionScreen() {
   const params = useLocalSearchParams<{
     userToId: string;
     date: string;
-    userToName?: string;
-    userToProfilePic?: string;
   }>();
 
   const { userToId, date: storyDate } = params;
@@ -138,9 +135,6 @@ export default function AttractionScreen() {
   const [sexualRating, setSexualRating] = useState(0);
   const [friendshipRating, setFriendshipRating] = useState(0);
   const [myExistingAttraction, setMyExistingAttraction] = useState<AttractionResponse | null>(null);
-
-  // ✅✅✅ CHANGE: Yeh state batayegi ke hum doosre user ki attraction ko respond kar rahe hain ya nahi
-  const [isRespondingToAttraction, setIsRespondingToAttraction] = useState(false);
 
   const [isLoading, setIsLoading] = useState(true);
   const [targetUserDisplay, setTargetUserDisplay] = useState<{
@@ -185,22 +179,16 @@ export default function AttractionScreen() {
       if (!authUser?.sub) return;
       setIsLoading(true);
 
-      // Dono directions mein attraction check karein
-      const [myAttractionRes, theirAttractionRes, targetUserRes] = await Promise.all([
+      const [myAttractionRes, targetUserRes] = await Promise.all([
         getAttractionByUserFromUserToAndDate(authUser.sub, userToId, storyDate).catch(() => null),
-        getAttractionByUserFromUserToAndDate(userToId, authUser.sub, storyDate).catch(() => null),
         getUserById(userToId).catch(() => null),
       ]);
 
       if (targetUserRes?.data) {
         setTargetUserDisplay({
-          name:
-            `${targetUserRes.data.firstName || ''} ${targetUserRes.data.lastName || ''}`.trim() ||
-            'User',
+          name: `${targetUserRes.data.firstName || ''}`.trim() || 'User',
           profilePictureUrl: targetUserRes.data.profilePictureUrl,
         });
-      } else {
-        setTargetUserDisplay({ name: 'User Not Found', profilePictureUrl: null });
       }
 
       if (myAttractionRes?.data) {
@@ -208,11 +196,6 @@ export default function AttractionScreen() {
         setRomanticRating(myAttractionRes.data.romanticRating || 0);
         setSexualRating(myAttractionRes.data.sexualRating || 0);
         setFriendshipRating(myAttractionRes.data.friendshipRating || 0);
-      }
-
-      // ✅✅✅ CHANGE: Agar doosre user ki attraction hai, to state set karein
-      if (theirAttractionRes?.data) {
-        setIsRespondingToAttraction(true);
       }
 
       setIsLoading(false);
@@ -241,32 +224,24 @@ export default function AttractionScreen() {
     return storeTokenBalance >= totalTokenCost;
   }, [storeTokenBalance, totalTokenCost, myExistingAttraction]);
 
-  const handleValidation = () => {
+  // ✅ Yahan ab sirf ek hi action hai: attraction submit karna
+  const handleExpressAttraction = async () => {
     if (!userToId || !storyDate || !authUser?.sub) {
       showPopup('Error', 'Essential information is missing.', 'error');
-      return false;
-    }
-    if (authUser.sub === userToId) {
-      showPopup('Action Not Allowed', 'You cannot express attraction to yourself.', 'error');
-      return false;
+      return;
     }
     if (romanticRating === 0 && sexualRating === 0 && friendshipRating === 0) {
       showPopup('No Rating Set', 'Please adjust at least one slider.', 'error');
-      return false;
+      return;
     }
-    if (!canProceed && !myExistingAttraction) {
+    if (!canProceed) {
       showPopup('Insufficient Tokens', `You need ${totalTokenCost} token(s).`, 'error');
-      return false;
+      return;
     }
-    return true;
-  };
 
-  // Flow 1: User B (Initiator) - Attraction submit karke calendar par jana
-  const handleExpressAttraction = async () => {
-    if (!handleValidation()) return;
     setIsSubmitting(true);
     try {
-      await createAttraction({
+      const response = await createAttraction({
         userTo: userToId,
         date: storyDate,
         romanticRating,
@@ -274,34 +249,21 @@ export default function AttractionScreen() {
         friendshipRating,
         isUpdate: !!myExistingAttraction,
       });
+
       await refreshBalance();
-      showPopup('Success!', 'Your attraction has been sent!', 'success', () =>
-        router.replace('/(app)/calendar')
-      );
+
+      const matchHappened = response.data.match === true;
+      const message = matchHappened
+        ? "It's a Match! You'll be notified if you get to propose the date."
+        : 'Your attraction has been sent!';
+
+      showPopup('Success!', message, 'success', () => router.replace('/(app)/calendar'));
     } catch (error: any) {
       const errorMessage = error.response?.data?.message || 'An unexpected error occurred.';
       showPopup('Submission Failed', errorMessage, 'error');
     } finally {
       setIsSubmitting(false);
     }
-  };
-
-  // Flow 2: User A (Responder) - Attraction set karke propose date par jana
-  const handleProceedToPropose = () => {
-    if (!handleValidation()) return;
-    router.push({
-      pathname: '/(app)/propose-date',
-      params: {
-        userToId,
-        dateForProposal: storyDate,
-        targetUserName: targetUserDisplay?.name || 'Selected User',
-        targetUserProfilePic: targetUserDisplay?.profilePictureUrl || '',
-        romanticRating: String(romanticRating),
-        sexualRating: String(sexualRating),
-        friendshipRating: String(friendshipRating),
-        isUpdate: myExistingAttraction ? 'true' : 'false',
-      },
-    });
   };
 
   const sliderData = [
@@ -419,28 +381,27 @@ export default function AttractionScreen() {
               </View>
             )}
 
-            {/* ✅✅✅ CHANGE: BUTTON KA ACTION AUR TEXT AB CONDITIONAL HAI ✅✅✅ */}
+            {/* ✅ Button ab hamesha "SUBMIT ATTRACTION" hoga */}
             <TouchableOpacity
               style={[
                 styles.mainActionButton,
                 styles.submitActionButton,
                 (!canProceed || isSubmitting) && styles.disabledActionButton,
               ]}
-              onPress={isRespondingToAttraction ? handleProceedToPropose : handleExpressAttraction}
+              onPress={handleExpressAttraction} // Hamesha yehi function call hoga
               disabled={!canProceed || isSubmitting}>
               {isSubmitting ? (
                 <ActivityIndicator color={themeColors.Black || '#000'} />
               ) : (
                 <Text style={[styles.mainActionButtonText, styles.submitActionButtonText]}>
-                  {isRespondingToAttraction ? 'PROPOSE DATE' : 'SUBMIT ATTRACTION'}
+                  SUBMIT ATTRACTION
                 </Text>
               )}
             </TouchableOpacity>
 
             <Text style={styles.explanatoryText}>
-              {isRespondingToAttraction
-                ? "They're already interested! Set your attraction and propose a date on the next screen."
-                : 'Set your attraction level. Tokens will be deducted immediately.'}
+              Set your attraction level. If you and the other person match, the one with lower
+              interest will get to propose the date.
             </Text>
           </ScrollView>
         </View>

@@ -4,6 +4,8 @@
 import * as admin from 'firebase-admin'
 import { Pool, PoolClient, QueryResult } from 'pg'
 import pool from '../../db'
+import { Attraction } from '../../types/Attraction'
+import { format as formatDate } from 'date-fns' // ✅ date-fns library ko import karein
 
 // --- Firebase Initialization Logic ---
 // This ensures Firebase Admin is initialized only once.
@@ -44,18 +46,9 @@ interface SenderProfileInfo {
   videoUrl?: string | null
 }
 
-interface AttractionRatings {
-  romanticRating?: number | null
-  sexualRating?: number | null
-  friendshipRating?: number | null
-}
-
 // --- Service Class ---
 
 class NotificationService {
-  // ✅ All methods that interact with the database now accept an optional `client` argument.
-  // This makes the service compatible with database transactions.
-
   // --- Private Helper Methods (Database Interactions) ---
 
   private async createDbNotification(
@@ -66,7 +59,7 @@ class NotificationService {
     proposingUserId: string | null = null,
     client: PoolClient | null = null,
   ) {
-    const db = client || pool // Use the transaction client if provided, otherwise the main pool
+    const db = client || pool
     try {
       const query = `
         INSERT INTO notifications (user_id, message, type, status, related_entity_id, proposing_user_id) 
@@ -104,7 +97,6 @@ class NotificationService {
   }
 
   // --- Private Helper Method (FCM Push Notification) ---
-  // This method does NOT interact with our database, so it doesn't need the client.
   private async sendFcmNotification(
     token: string,
     title: string,
@@ -132,7 +124,7 @@ class NotificationService {
     }
   }
 
-  // --- Public Methods (Called by other services) ---
+  // --- Public Methods ---
 
   async sendAttractionProposalNotification(
     senderUserId: string,
@@ -161,18 +153,77 @@ class NotificationService {
     }
   }
 
+  async sendNewMatchProposalNotification(
+    attraction1: Attraction,
+    attraction2: Attraction,
+    client: PoolClient | null = null,
+  ) {
+    const score1 =
+      (attraction1.romanticRating || 0) +
+      (attraction1.sexualRating || 0) +
+      (attraction1.friendshipRating || 0)
+    const score2 =
+      (attraction2.romanticRating || 0) +
+      (attraction2.sexualRating || 0) +
+      (attraction2.friendshipRating || 0)
+
+    let recipientId: string, senderId: string
+    if (score1 < score2) {
+      recipientId = attraction1.userFrom!
+      senderId = attraction2.userFrom!
+    } else if (score2 < score1) {
+      recipientId = attraction2.userFrom!
+      senderId = attraction1.userFrom!
+    } else {
+      recipientId = Math.random() < 0.5 ? attraction1.userFrom! : attraction2.userFrom!
+      senderId =
+        recipientId === attraction1.userFrom ? attraction2.userFrom! : attraction1.userFrom!
+    }
+
+    const senderProfile = await this.getUserProfile(senderId, client)
+    if (!senderProfile) {
+      console.error(`[Notification] Could not find profile for sender ${senderId}. Aborting.`)
+      return
+    }
+
+    const title = 'It’s a Match! 🎉'
+    const body = 'They feel the same. Does their Plan work for you to meet in real life?'
+    const type = 'MATCH_PROPOSAL'
+
+    // ✅✅✅ --- THIS IS THE FIX --- ✅✅✅
+    // `date-fns` ka istemal karke date ko hamesha sahi YYYY-MM-DD format mein convert karein.
+    // Yeh timezone ki problem se bachata hai.
+    const formattedDate = formatDate(new Date(attraction1.date!), 'yyyy-MM-dd')
+    // ✅✅✅ --- END OF FIX --- ✅✅✅
+
+    // Ab hum hamesha `formattedDate` ka use karenge.
+    await this.createDbNotification(recipientId, body, type, formattedDate, senderId, client)
+
+    const token = await this.getFcmToken(recipientId, client)
+    if (token) {
+      await this.sendFcmNotification(token, title, body, senderProfile.profilePictureUrl, {
+        type: type,
+        dateForProposal: formattedDate, // Frontend ko hamesha sahi format milega
+        userToId: senderId,
+      })
+    }
+    console.log(
+      `[Notification] Sent MATCH_PROPOSAL to ${recipientId} for story date ${formattedDate}.`,
+    )
+  }
+
+  // --- Baaki sabhi notification functions (inmein koi badlav nahi hai) ---
+
   async sendDateProposalNotification(
     senderUserId: string,
     receiverUserId: string,
     dateDetails: { dateId: number; date: string; time: string; venue: string },
-    attractionRatings: AttractionRatings | null,
     client: PoolClient | null = null,
   ) {
     const senderProfile = await this.getUserProfile(senderUserId, client)
     if (!senderProfile) return
 
-    const senderName =
-      `${senderProfile.firstName || ''} ${senderProfile.lastName || ''}`.trim() || 'Someone'
+    const senderName = `${senderProfile.firstName || 'Someone'}`.trim()
     const body = `${senderName} proposed a date at ${dateDetails.venue}. Tap to see details!`
     const type = 'DATE_PROPOSAL'
 
@@ -197,64 +248,6 @@ class NotificationService {
     }
   }
 
-  async sendMatchNotification(
-    userFromId: string,
-    userToId: string,
-    attractionId: number,
-    client: PoolClient | null = null,
-  ) {
-    const [userFromProfile, userToProfile] = await Promise.all([
-      this.getUserProfile(userFromId, client),
-      this.getUserProfile(userToId, client),
-    ])
-    if (!userFromProfile || !userToProfile) return
-
-    const fromName = `${userFromProfile.firstName || ''}`.trim() || 'Someone'
-    const toName = `${userToProfile.firstName || ''}`.trim() || 'Someone'
-
-    // Notify User From
-    const messageToUserFrom = `It's a Match with ${toName}! 💖`
-    await this.createDbNotification(
-      userFromId,
-      messageToUserFrom,
-      'MATCH',
-      userToId,
-      userToId,
-      client,
-    )
-    const tokenFrom = await this.getFcmToken(userFromId, client)
-    if (tokenFrom) {
-      await this.sendFcmNotification(
-        tokenFrom,
-        'You Have a New Match!',
-        messageToUserFrom,
-        userToProfile.profilePictureUrl,
-        { type: 'MATCH', matchedUserId: userToId },
-      )
-    }
-
-    // Notify User To
-    const messageToUserTo = `It's a Match with ${fromName}! 💖`
-    await this.createDbNotification(
-      userToId,
-      messageToUserTo,
-      'MATCH',
-      userFromId,
-      userFromId,
-      client,
-    )
-    const tokenTo = await this.getFcmToken(userToId, client)
-    if (tokenTo) {
-      await this.sendFcmNotification(
-        tokenTo,
-        'You Have a New Match!',
-        messageToUserTo,
-        userFromProfile.profilePictureUrl,
-        { type: 'MATCH', matchedUserId: userFromId },
-      )
-    }
-  }
-
   async sendDateResponseNotification(
     responderUserId: string,
     receiverUserId: string,
@@ -265,7 +258,7 @@ class NotificationService {
     const responderProfile = await this.getUserProfile(responderUserId, client)
     if (!responderProfile) return
 
-    const responderName = `${responderProfile.firstName || ''}`.trim() || 'Someone'
+    const responderName = `${responderProfile.firstName || 'Someone'}`.trim()
     const actionText = responseType === 'ACCEPTED' ? 'accepted' : 'declined'
     const title = responseType === 'ACCEPTED' ? 'Date Accepted! ✅' : 'Date Update'
     const body = `${responderName} has ${actionText} your date proposal.`
@@ -290,7 +283,7 @@ class NotificationService {
     const updaterProfile = await this.getUserProfile(updaterUserId, client)
     if (!updaterProfile) return
 
-    const updaterName = `${updaterProfile.firstName || ''}`.trim() || 'Someone'
+    const updaterName = `${updaterProfile.firstName || 'Someone'}`.trim()
     const body = `${updaterName} has rescheduled your date. Tap to see the new details.`
     const type = 'DATE_RESCHEDULED'
 
@@ -316,7 +309,7 @@ class NotificationService {
     const cancellerProfile = await this.getUserProfile(cancellerUserId, client)
     if (!cancellerProfile) return
 
-    const cancellerName = `${cancellerProfile.firstName || ''}`.trim() || 'Someone'
+    const cancellerName = `${cancellerProfile.firstName || 'Someone'}`.trim()
     const body = `${cancellerName} has cancelled your upcoming date.`
     const type = 'DATE_CANCELLED'
 

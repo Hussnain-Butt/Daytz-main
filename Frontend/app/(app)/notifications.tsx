@@ -56,6 +56,10 @@ const BubblePopup = ({ visible, type, title, message, buttonText, onClose }) => 
 // --- END OF BUBBLE POPUP COMPONENT ---
 
 const getNotificationIcon = (notificationType: string) => {
+  // ✅ Match proposal ko bhi happy icon dikhayein
+  if (notificationType === 'MATCH_PROPOSAL' || notificationType.startsWith('DATE_APPROVED')) {
+    return calcHappyIcon;
+  }
   if (notificationType === 'DATE_DECLINED' || notificationType === 'DATE_CANCELLED') {
     return calcErrorIcon;
   }
@@ -130,29 +134,50 @@ export default function NotificationsScreen() {
     setIsRefreshing(false);
   }, [fetchNotifications]);
 
+  // ✅ Navigation logic ko naye `MATCH_PROPOSAL` flow ke liye update kiya gaya hai
   const handleNotificationPress = (item: Notification) => {
     console.log('Notification pressed:', item);
 
-    // ✅✅✅ FIX: Story redirection logic updated ✅✅✅
-    if (item.type === 'ATTRACTION_PROPOSAL' && item.related_entity_id && item.proposing_user_id) {
-      router.push({
-        pathname: '/(app)/stories',
-        params: {
-          date: item.related_entity_id, // Story ki date
-          initialUserId: item.proposing_user_id, // Kiski story dikhani hai
-        },
-      });
-    } else if (
-      (item.type === 'DATE_PROPOSAL' ||
-        item.type === 'DATE_APPROVED' ||
-        item.type === 'DATE_DECLINED' ||
-        item.type === 'DATE_RESCHEDULED' ||
-        item.type === 'DATE_CANCELLED') &&
-      item.related_entity_id
-    ) {
-      router.push(`/(app)/dates/${item.related_entity_id}`);
-    } else {
-      console.log('No specific navigation action for this notification type:', item.type);
+    switch (item.type) {
+      case 'ATTRACTION_PROPOSAL':
+        if (item.related_entity_id && item.proposing_user_id) {
+          router.push({
+            pathname: '/(app)/stories',
+            params: {
+              date: item.related_entity_id, // Story ki date
+              initialUserId: item.proposing_user_id, // Kiski story dikhani hai
+            },
+          });
+        }
+        break;
+
+      // ✅ YEH HAI NAYI LOGIC: Match hone par propose-date screen par jao
+      case 'MATCH_PROPOSAL':
+        if (item.related_entity_id && item.proposing_user_id) {
+          router.push({
+            pathname: '/(app)/propose-date',
+            params: {
+              userToId: item.proposing_user_id, // Jiske liye propose karna hai
+              dateForProposal: item.related_entity_id, // Story ki date
+            },
+          });
+        }
+        break;
+
+      // Baaki sabhi date-related notifications abhi bhi date details screen par jayenge
+      case 'DATE_PROPOSAL':
+      case 'DATE_APPROVED':
+      case 'DATE_DECLINED':
+      case 'DATE_RESCHEDULED':
+      case 'DATE_CANCELLED':
+        if (item.related_entity_id) {
+          router.push(`/(app)/dates/${item.related_entity_id}`);
+        }
+        break;
+
+      default:
+        console.log('No specific navigation action for this notification type:', item.type);
+        break;
     }
   };
 

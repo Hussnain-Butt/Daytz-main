@@ -1,5 +1,5 @@
 // File: src/handlers/attractionHandlers.ts
-// ✅ COMPLETE AND FINAL CORRECTED CODE
+// ✅ COMPLETE AND FINAL UPDATED CODE
 
 import { Response, NextFunction } from 'express'
 import pool from '../db'
@@ -28,12 +28,10 @@ export const createAttractionHandler = asyncHandler(
       romanticRating = 0,
       sexualRating = 0,
       friendshipRating = 0,
-      longTermPotential = false,
-      intellectual = false,
-      emotional = false,
       isUpdate = false,
     } = req.body
 
+    // --- Basic Validation (No changes) ---
     if (
       !userTo ||
       !date ||
@@ -49,28 +47,10 @@ export const createAttractionHandler = asyncHandler(
 
     const client = await pool.connect()
     try {
+      // Step 1: Database transaction shuru karein
       await client.query('BEGIN')
 
-      const servicePayload: CreateAttractionInternalPayload = {
-        userFrom: authenticatedUserId,
-        userTo,
-        date,
-        romanticRating,
-        sexualRating,
-        friendshipRating,
-        longTermPotential,
-        intellectual,
-        emotional,
-        result: null,
-        firstMessageRights: null,
-      }
-
-      // Step 1: Perform all database operations within the transaction
-      const finalAttraction = await attractionService.createOrUpdateAttraction(
-        servicePayload,
-        client,
-      )
-
+      // Step 2: Token deduct karein (agar nayi attraction hai)
       const tokenCost = romanticRating + sexualRating + friendshipRating
       if (!isUpdate && tokenCost > 0) {
         await userService.spendTokensForUser(
@@ -81,58 +61,80 @@ export const createAttractionHandler = asyncHandler(
         )
       }
 
-      // Step 2: Commit the transaction to save all DB changes
+      // Step 3: Attraction create/update karein aur match result check karein
+      const { finalAttraction, matchResult } = await attractionService.createOrUpdateAttraction(
+        {
+          userFrom: authenticatedUserId,
+          userTo,
+          date,
+          romanticRating,
+          sexualRating,
+          friendshipRating,
+          // Baki fields service layer mein handle ho jaati hain
+          longTermPotential: false,
+          intellectual: false,
+          emotional: false,
+          result: null,
+          firstMessageRights: null,
+        },
+        client,
+      )
+
+      // Step 4: Agar sab theek hai, to transaction commit karein
       await client.query('COMMIT')
 
-      // Step 3: Send notifications AFTER the transaction is successfully committed.
-      // This prevents a notification failure from rolling back the database state.
+      // Step 5: Sahi notification bhejein (transaction ke bahar)
       try {
-        if (!isUpdate) {
-          // Send proposal notification on new attraction
+        if (matchResult) {
+          // Case A: Yeh doosri attraction thi, isliye match calculate hua
+          if (matchResult.isMatch && matchResult.counterpartAttraction) {
+            // Match successful hua! Nayi "MATCH_PROPOSAL" notification bhejein.
+            // ✅ Ab yahan dateId nahi, sirf attraction objects pass honge
+            await notificationService.sendNewMatchProposalNotification(
+              finalAttraction, // User ki apni attraction
+              matchResult.counterpartAttraction, // Doosre user ki attraction
+            )
+          } else {
+            // Match-up to hua, lekin result 'false' tha (mismatch). Koi notification nahi bhejni.
+            console.log(`[AttractionHandler] Mismatch for date ${date}. No notification sent.`)
+          }
+        } else {
+          // Case B: Yeh pehli attraction thi. Sirf "ATTRACTION_PROPOSAL" notification bhejein.
           await notificationService.sendAttractionProposalNotification(
             authenticatedUserId,
             userTo,
             date,
           )
         }
-
-        // Send match notification only if there is a match result
-        if (finalAttraction.result) {
-          await notificationService.sendMatchNotification(
-            authenticatedUserId,
-            userTo,
-            finalAttraction.attractionId,
-          )
-        }
       } catch (notificationError) {
-        // Log notification errors but don't fail the entire request,
-        // as the core action (attraction submission) was successful.
         console.error(
           '[CreateAttractionHandler] Notification failed to send after successful commit:',
           notificationError,
         )
       }
 
-      // Step 4: Send a successful response to the client
-      const statusCode =
-        finalAttraction.createdAt?.getTime() === finalAttraction.updatedAt?.getTime() ? 201 : 200
-      res.status(statusCode).json(finalAttraction)
+      // Step 6: Frontend ko successful response bhejein
+      res.status(200).json({
+        message: 'Attraction submitted successfully.',
+        attraction: finalAttraction,
+        match: matchResult?.isMatch ?? null, // Frontend ko batayein ki match hua ya nahi
+      })
     } catch (error: any) {
-      // If any DB operation fails, roll back the entire transaction
+      // Agar koi bhi step fail hua, to transaction rollback karein
       await client.query('ROLLBACK')
       console.error('[CreateAttractionHandler] Transaction rolled back. Error:', error.message)
       if (error.code === 'INSUFFICIENT_FUNDS') {
         return res.status(402).json({ message: 'Insufficient tokens for this action.' })
       }
-      next(error)
+      next(error) // Doosre errors ke liye error middleware ko call karein
     } finally {
-      // Always release the client back to the pool
+      // Client ko pool mein wapas release karein
       client.release()
     }
   },
 )
 
-// No changes to the handlers below
+// --- Baaki ke handlers mein koi badlav nahi ---
 export const getAttractionsByUserFromAndUserToHandler = asyncHandler(
   async (req: CustomRequest, res: Response, next: NextFunction) => {
     const userFrom = req.params.userFrom

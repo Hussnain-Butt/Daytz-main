@@ -66,15 +66,13 @@ class DatesRepository {
     return humps.camelizeKeys(rows[0])
   }
 
-  // ✅ --- THIS IS THE FIX ---
-  // The SQL query is updated to fetch dates with 'approved' OR 'pending' status.
   async getUpcomingDatesByUserId(userId: string): Promise<UpcomingDate[]> {
     const query = `
       SELECT
         d.date_id as "dateId", 
         d.date, 
         d.time,
-        d.status, -- ✅ Selecting the status field for the frontend
+        d.status,
         d.updated_at as "updatedAt",
         d.location_metadata as "locationMetadata",
         d.user_from as "userFrom",
@@ -92,30 +90,44 @@ class DatesRepository {
       JOIN users ut ON d.user_to = ut.user_id
       LEFT JOIN date_feedback AS feedback ON feedback.date_id = d.date_id AND feedback.user_id = $1
       WHERE (d.user_from = $1 OR d.user_to = $1)
-      AND d.status IN ('approved', 'pending') -- ✅ Fetching both pending and approved dates
+      AND d.status IN ('approved', 'pending')
       ORDER BY d.date DESC, d.time DESC;
     `
     const { rows } = await pool.query(query, [userId])
     return rows.map((row) => humps.camelizeKeys(row)) as UpcomingDate[]
   }
 
-  async getDateEntryById(dateId: number): Promise<DateType | null> {
+  async getDateEntryById(
+    dateId: number,
+    client: PoolClient | null = null,
+  ): Promise<DateType | null> {
+    const db = client || pool
     const query = `SELECT * FROM dates WHERE date_id = $1`
-    const { rows } = await pool.query(query, [dateId])
+    const { rows } = await db.query(query, [dateId])
     return rows.length ? mapRowToDate(rows[0]) : null
   }
 
+  // ✅✅✅ --- THIS IS THE FIX --- ✅✅✅
+  // Ab yeh function optional `client` argument accept karega
   async getDateEntryByUsersAndDate(
     user1: string,
     user2: string,
     date: string,
+    client: PoolClient | null = null, // ✅ Argument add kiya gaya
   ): Promise<DateType | null> {
+    const db = client || pool // ✅ Transaction client ya global pool use karega
     const query = `SELECT * FROM dates WHERE (user_from = $1 AND user_to = $2 OR user_from = $2 AND user_to = $1) AND date = $3`
-    const { rows } = await pool.query(query, [user1, user2, date])
+    const { rows } = await db.query(query, [user1, user2, date]) // ✅ `db` use kiya gaya hai
     return rows.length ? mapRowToDate(rows[0]) : null
   }
+  // ✅✅✅ --- END OF FIX --- ✅✅✅
 
-  async updateDateEntry(dateId: number, dateEntry: Partial<DateType>): Promise<DateType | null> {
+  async updateDateEntry(
+    dateId: number,
+    dateEntry: Partial<DateType>,
+    client: PoolClient | null = null,
+  ): Promise<DateType | null> {
+    const db = client || pool
     const fieldsToUpdate: string[] = []
     const values: any[] = []
     let queryIndex = 1
@@ -127,13 +139,13 @@ class DatesRepository {
         queryIndex++
       }
     })
-    if (fieldsToUpdate.length === 0) return this.getDateEntryById(dateId)
+    if (fieldsToUpdate.length === 0) return this.getDateEntryById(dateId, client)
 
     values.push(dateId)
     const query = `UPDATE dates SET ${fieldsToUpdate.join(
       ', ',
     )}, updated_at = NOW() WHERE date_id = $${queryIndex} RETURNING *`
-    const { rows } = await pool.query(query, values)
+    const { rows } = await db.query(query, values)
     return rows.length ? mapRowToDate(rows[0]) : null
   }
 }

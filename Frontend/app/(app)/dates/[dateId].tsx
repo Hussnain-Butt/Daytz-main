@@ -271,7 +271,7 @@ const DateDetailScreen = () => {
       await updateDate(dateId, newDetails);
       showPopup(
         'Request Sent!',
-        'Main User B se rabta karta hoon aur dekhta hoon kya yeh naya plan unke liye bhi theek hai!',
+        "I'll reach out to User B and see if this new plan works for them too!",
         'success',
         fetchDateDetails
       );

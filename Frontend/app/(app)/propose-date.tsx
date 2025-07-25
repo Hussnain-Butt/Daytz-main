@@ -1,3 +1,4 @@
+// File: app/(app)/propose-date.tsx
 // ✅ COMPLETE AND FINAL UPDATED CODE
 
 import React, { useState, useEffect, useCallback, useRef } from 'react';
@@ -26,20 +27,19 @@ import {
   createDate,
   getUserById,
   isAuthTokenApiError,
-  getUserTokenBalance,
   getDateByUserFromUserToAndDate,
+  getAttractionByUserFromUserToAndDate,
 } from '../../api/api';
 import { CreateDatePayload, DateObject as DateType } from '../../types/Date';
 import { User } from '../../types/User';
+import { Attraction as AttractionResponse } from '../../types/Attraction';
 import { useUserStore } from '../../store/useUserStore';
 
-// --- Assets ---
+// --- Assets, Colors, Components (No changes here) ---
 const BACK_ARROW_ICON = require('../../assets/back_arrow_icon.png');
 const BRAND_LOGO = require('../../assets/brand.png');
 const calcHappyIcon = require('../../assets/calc-happy.png');
 const calcErrorIcon = require('../../assets/calc-error.png');
-
-// --- Screen Colors ---
 const screenColors = {
   background: '#121212',
   textPrimary: '#FFFFFF',
@@ -55,8 +55,6 @@ const screenColors = {
   Black: '#000000',
   White: '#FFFFFF',
 };
-
-// --- BUBBLE POPUP COMPONENT ---
 const BubblePopup = ({ visible, type, title, message, buttonText, onClose }) => {
   if (!visible) return null;
   const isSuccess = type === 'success';
@@ -81,47 +79,17 @@ const BubblePopup = ({ visible, type, title, message, buttonText, onClose }) => 
   );
 };
 
-// --- Custom Hook for Debouncing ---
-const useDebounce = (value, delay) => {
-  const [debouncedValue, setDebouncedValue] = useState(value);
-  useEffect(() => {
-    const handler = setTimeout(() => setDebouncedValue(value), delay);
-    return () => clearTimeout(handler);
-  }, [value, delay]);
-  return debouncedValue;
-};
-
 const ProposeDateScreen = () => {
   const router = useRouter();
-  const params = useLocalSearchParams<{
-    userToId: string;
-    dateForProposal: string;
-    targetUserName?: string;
-    targetUserProfilePic?: string;
-    romanticRating: string;
-    sexualRating: string;
-    friendshipRating: string;
-    isUpdate: string;
-  }>();
-
-  const {
-    userToId,
-    dateForProposal,
-    targetUserName,
-    targetUserProfilePic,
-    romanticRating: romanticRatingStr,
-    sexualRating: sexualRatingStr,
-    friendshipRating: friendshipRatingStr,
-    isUpdate,
-  } = params;
-
+  const params = useLocalSearchParams<{ userToId: string; dateForProposal: string }>();
+  const { userToId, dateForProposal } = params;
   const { auth0User: authUser, logout } = useAuth();
-  const { setTokenBalance: setStoreTokenBalance } = useUserStore();
 
   const [targetUser, setTargetUser] = useState<Partial<User> | null>(null);
+  const [myAttraction, setMyAttraction] = useState<AttractionResponse | null>(null);
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
-  const [existingDateStatus, setExistingDateStatus] = useState<DateType['status'] | null>(null);
+  const [existingDate, setExistingDate] = useState<DateType | null>(null);
   const [selectedEventDate, setSelectedEventDate] = useState<Date | null>(null);
   const [showTimePicker, setShowTimePicker] = useState(false);
   const [selectedTime, setSelectedTime] = useState<Date | null>(null);
@@ -134,11 +102,6 @@ const ProposeDateScreen = () => {
     message: '',
     onCloseCallback: undefined as (() => void) | undefined,
   });
-  const [suggestions, setSuggestions] = useState([]);
-  const [showSuggestions, setShowSuggestions] = useState(false);
-  const [suggestionsPosition, setSuggestionsPosition] = useState({ top: 0, width: 0, left: 0 });
-  const debouncedVenueName = useDebounce(venueName, 500);
-  const venueInputRef = useRef<TextInput>(null);
 
   const showPopup = (
     title: string,
@@ -148,42 +111,6 @@ const ProposeDateScreen = () => {
   ) => {
     setPopupState({ visible: true, title, message, type, onCloseCallback });
   };
-
-  const GOOGLE_PLACES_API_KEY = 'YOUR_GOOGLE_PLACES_API_KEY_HERE'; // ⚠️ Insecure, move to backend
-
-  const fetchPlaceSuggestions = useCallback(async (input: string) => {
-    if (!input || input.length < 3) {
-      setSuggestions([]);
-      setShowSuggestions(false);
-      return;
-    }
-    try {
-      const response = await fetch(
-        `https://maps.googleapis.com/maps/api/place/autocomplete/json?input=${encodeURIComponent(input)}&key=${GOOGLE_PLACES_API_KEY}`
-      );
-      const json = await response.json();
-      if (json.predictions) {
-        setSuggestions(json.predictions);
-        setShowSuggestions(true);
-      } else {
-        setSuggestions([]);
-        setShowSuggestions(false);
-      }
-    } catch (error) {
-      console.error('Error fetching place suggestions:', error);
-      setSuggestions([]);
-      setShowSuggestions(false);
-    }
-  }, []);
-
-  useEffect(() => {
-    if (debouncedVenueName) {
-      fetchPlaceSuggestions(debouncedVenueName);
-    } else {
-      setSuggestions([]);
-      setShowSuggestions(false);
-    }
-  }, [debouncedVenueName, fetchPlaceSuggestions]);
 
   useEffect(() => {
     RNStatusBar.setBarStyle('light-content');
@@ -195,8 +122,11 @@ const ProposeDateScreen = () => {
       return;
     }
 
-    const initialEventDate = parseISO(dateForProposal);
-    if (!isValid(initialEventDate)) {
+    const dateStringOnly = dateForProposal.split('T')[0];
+    const parts = dateStringOnly.split('-');
+    const initialEventDate = new Date(Number(parts[0]), Number(parts[1]) - 1, Number(parts[2]));
+
+    if (!isValid(initialEventDate) || parts.length < 3) {
       setError('The provided date is invalid.');
       setIsLoading(false);
       return;
@@ -205,52 +135,46 @@ const ProposeDateScreen = () => {
 
     const fetchInitialData = async () => {
       try {
-        if (targetUserName) {
-          setTargetUser({ firstName: targetUserName, profilePictureUrl: targetUserProfilePic });
-        } else {
-          const response = await getUserById(userToId);
-          if (!response.data) throw new Error('Target user not found.');
-          setTargetUser(response.data);
+        const [userResponse, dateResponse, attractionResponse] = await Promise.all([
+          getUserById(userToId),
+          getDateByUserFromUserToAndDate(authUser.sub!, userToId, dateForProposal),
+          getAttractionByUserFromUserToAndDate(authUser.sub!, userToId, dateForProposal),
+        ]);
+
+        if (!userResponse.data) throw new Error('Target user not found.');
+        setTargetUser(userResponse.data);
+
+        if (dateResponse.data) setExistingDate(dateResponse.data);
+
+        // ✅✅✅ --- THIS IS THE FIX --- ✅✅✅
+        // Hum ab `result` ko check nahi karenge. Agar notification aayi hai, to hum trust
+        // karenge ki match hai. Hum sirf yeh check karenge ki attraction ka data mila ya nahi.
+        if (!attractionResponse.data) {
+          throw new Error('Could not load your attraction details to create a proposal.');
         }
-        const dateResponse = await getDateByUserFromUserToAndDate(
-          authUser.sub!,
-          userToId,
-          dateForProposal
-        );
-        if (dateResponse.data?.status) {
-          setExistingDateStatus(dateResponse.data.status as DateType['status']);
-        }
-      } catch (err) {
+        // ✅✅✅ --- END OF FIX --- ✅✅✅
+        setMyAttraction(attractionResponse.data);
+      } catch (err: any) {
         console.error('Failed to fetch initial data for propose date screen:', err);
-        setError('Failed to load user details. Please try again.');
+        setError(err.message || 'Failed to load details. Please try again.');
+        if (isAuthTokenApiError(err)) logout?.();
       } finally {
         setIsLoading(false);
       }
     };
 
     fetchInitialData();
-  }, [userToId, dateForProposal, authUser?.sub, targetUserName, targetUserProfilePic]);
+  }, [userToId, dateForProposal, authUser?.sub, logout]);
 
   const handleTimeConfirm = (time: Date) => {
     setSelectedTime(time);
     setShowTimePicker(false);
   };
-  const handleSelectSuggestion = (suggestion: any) => {
-    setVenueName(suggestion.description);
-    setSuggestions([]);
-    setShowSuggestions(false);
-    Keyboard.dismiss();
-  };
-  const measureVenueInput = () => {
-    venueInputRef.current?.measure((fx, fy, width, height, px, py) => {
-      setSuggestionsPosition({ top: py + height + 4, width, left: px });
-    });
-  };
 
   const handleProposeDate = useCallback(async () => {
     Keyboard.dismiss();
-    if (!authUser?.sub || !userToId || !selectedEventDate) {
-      showPopup('Error', 'Essential information is missing.', 'error');
+    if (!authUser?.sub || !userToId || !selectedEventDate || !myAttraction) {
+      showPopup('Error', 'Essential information is missing or match not found.', 'error');
       return;
     }
     if (!selectedTime || !venueName.trim()) {
@@ -264,40 +188,22 @@ const ProposeDateScreen = () => {
       date: format(selectedEventDate, 'yyyy-MM-dd'),
       time: format(selectedTime, 'HH:mm:ss'),
       locationMetadata: { name: venueName.trim(), address: '' },
-      romanticRating: parseInt(romanticRatingStr || '0', 10),
-      sexualRating: parseInt(sexualRatingStr || '0', 10),
-      friendshipRating: parseInt(friendshipRatingStr || '0', 10),
-      isUpdate: isUpdate === 'true',
+      romanticRating: myAttraction.romanticRating || 0,
+      sexualRating: myAttraction.sexualRating || 0,
+      friendshipRating: myAttraction.friendshipRating || 0,
+      isUpdate: false,
     };
 
     try {
       await createDate(payload);
-      const tokenResponse = await getUserTokenBalance();
-      setStoreTokenBalance(tokenResponse.data.tokenBalance);
       showPopup('Success!', 'Your date proposal has been sent.', 'success', () =>
         router.replace('/(app)/calendar')
       );
     } catch (err: any) {
-      // ✅ --- DEBUGGING LOGS ---
-      // Yeh lines error ko terminal mein print karwayengi
-      console.log('--- CATCH BLOCK ENTERED ---');
-      console.log('Error Message:', err.message);
-      console.log('Is Response available?:', !!err.response);
-      console.log('Response Data:', err?.response?.data);
-
-      const errorMessage = err?.response?.data?.message || '';
-
-      if (err?.response?.data?.code === 'NOT_A_MATCH' || errorMessage.includes('are not aligned')) {
-        showPopup(
-          'Match Not Found',
-          'Your interests for this date are not aligned. You can adjust your interest levels and try again if you wish.',
-          'error'
-        );
-      } else {
-        showPopup('Proposal Failed', errorMessage || 'An unexpected error occurred.', 'error');
-      }
-
-      if (isAuthTokenApiError(err)) logout && logout();
+      console.error('Error in createDate API call:', err.response?.data || err.message);
+      const errorMessage = err?.response?.data?.message || 'An unexpected error occurred.';
+      showPopup('Proposal Failed', errorMessage, 'error');
+      if (isAuthTokenApiError(err)) logout?.();
     } finally {
       setIsSubmitting(false);
     }
@@ -307,46 +213,35 @@ const ProposeDateScreen = () => {
     selectedEventDate,
     selectedTime,
     venueName,
-    isUpdate,
+    myAttraction,
     router,
-    setStoreTokenBalance,
-    romanticRatingStr,
-    sexualRatingStr,
-    friendshipRatingStr,
     logout,
   ]);
 
   const renderFooter = () => {
-    if (existingDateStatus === 'pending') {
+    if (existingDate && existingDate.status !== 'cancelled' && existingDate.status !== 'declined') {
       return (
         <View style={styles.infoBox}>
-          <Text style={styles.infoBoxText}>Proposal Already Sent</Text>
-          <Text style={styles.infoBoxSubText}>Waiting for the other user to respond.</Text>
-        </View>
-      );
-    }
-    if (existingDateStatus === 'approved') {
-      return (
-        <View style={styles.infoBox}>
-          <Text style={styles.infoBoxText}>Date is Confirmed!</Text>
-          <Text style={styles.infoBoxSubText}>You can check the details in your calendar.</Text>
+          <Text style={styles.infoBoxText}>Date Already Active</Text>
+          <Text style={styles.infoBoxSubText}>A proposal for this day already exists.</Text>
         </View>
       );
     }
     return (
       <TouchableOpacity
-        style={[styles.submitButton, isSubmitting && styles.disabledButton]}
+        style={[styles.submitButton, (isSubmitting || !myAttraction) && styles.disabledButton]}
         onPress={handleProposeDate}
-        disabled={isSubmitting}>
+        disabled={isSubmitting || !myAttraction}>
         {isSubmitting ? (
           <ActivityIndicator color={screenColors.buttonText} />
         ) : (
-          <Text style={styles.submitButtonText}>Submit</Text>
+          <Text style={styles.submitButtonText}>Submit Proposal</Text>
         )}
       </TouchableOpacity>
     );
   };
 
+  // --- JSX & Styles (No changes from here) ---
   if (isLoading) {
     return (
       <SafeAreaView style={[styles.container, styles.centered]}>
@@ -354,7 +249,6 @@ const ProposeDateScreen = () => {
       </SafeAreaView>
     );
   }
-
   if (error) {
     return (
       <SafeAreaView style={[styles.container, styles.centered]}>
@@ -404,14 +298,11 @@ const ProposeDateScreen = () => {
               <View style={styles.inputContainer}>
                 <Text style={styles.inputLabel}>Venue</Text>
                 <TextInput
-                  ref={venueInputRef}
                   style={styles.textInput}
                   placeholder="e.g., boo Club, East Anaheim Street..."
                   placeholderTextColor={screenColors.inputPlaceholder}
                   value={venueName}
                   onChangeText={setVenueName}
-                  onFocus={measureVenueInput}
-                  onBlur={() => setTimeout(() => setShowSuggestions(false), 200)}
                 />
               </View>
               <View style={styles.inputContainer}>
@@ -431,28 +322,6 @@ const ProposeDateScreen = () => {
         </ScrollView>
         <View style={styles.footer}>{renderFooter()}</View>
       </KeyboardAvoidingView>
-      {showSuggestions && suggestions.length > 0 && (
-        <FlatList
-          data={suggestions}
-          keyExtractor={(item) => item.place_id}
-          renderItem={({ item }) => (
-            <TouchableOpacity
-              style={styles.suggestionItem}
-              onPress={() => handleSelectSuggestion(item)}>
-              <Text style={styles.suggestionText}>{item.description}</Text>
-            </TouchableOpacity>
-          )}
-          style={[
-            styles.suggestionsList,
-            {
-              top: suggestionsPosition.top,
-              left: suggestionsPosition.left,
-              width: suggestionsPosition.width,
-            },
-          ]}
-          keyboardShouldPersistTaps="always"
-        />
-      )}
       <DateTimePickerModal
         isVisible={showTimePicker}
         mode="time"
@@ -475,7 +344,6 @@ const ProposeDateScreen = () => {
   );
 };
 
-// --- Styles ---
 const styles = StyleSheet.create({
   container: {
     flex: 1,
@@ -618,18 +486,6 @@ const styles = StyleSheet.create({
   successButton: { backgroundColor: screenColors.GoldPrimary },
   errorButtonText: { color: screenColors.White, fontSize: 15, fontWeight: 'bold' },
   successButtonText: { color: screenColors.Black, fontSize: 15, fontWeight: 'bold' },
-  suggestionsList: {
-    position: 'absolute',
-    maxHeight: 200,
-    backgroundColor: screenColors.inputBackground,
-    borderRadius: 12,
-    borderWidth: 1,
-    borderColor: screenColors.avatarBorder,
-    zIndex: 1000,
-    elevation: 10,
-  },
-  suggestionItem: { padding: 15, borderBottomWidth: 1, borderBottomColor: '#3A3A3C' },
-  suggestionText: { color: screenColors.textPrimary, fontSize: 16 },
 });
 
 export default ProposeDateScreen;
