@@ -89,7 +89,6 @@ export const createAttractionHandler = asyncHandler(
           // Case A: Yeh doosri attraction thi, isliye match calculate hua
           if (matchResult.isMatch && matchResult.counterpartAttraction) {
             // Match successful hua! Nayi "MATCH_PROPOSAL" notification bhejein.
-            // ✅ Ab yahan dateId nahi, sirf attraction objects pass honge
             await notificationService.sendNewMatchProposalNotification(
               finalAttraction, // User ki apni attraction
               matchResult.counterpartAttraction, // Doosre user ki attraction
