@@ -65,6 +65,7 @@ export const createAttractionHandler = asyncHandler(
         firstMessageRights: null,
       }
 
+      // Step 1: Perform all database operations within the transaction
       const finalAttraction = await attractionService.createOrUpdateAttraction(
         servicePayload,
         client,
@@ -80,32 +81,44 @@ export const createAttractionHandler = asyncHandler(
         )
       }
 
-      // ✅✅✅ CHANGE: Yahan naya notification bheja ja raha hai ✅✅✅
-      // Attraction create hotay hi doosre user ko notification bhej do.
-      if (!isUpdate) {
-        // Sirf nayi attraction par bhejein, update par nahi
-        await notificationService.sendAttractionProposalNotification(
-          authenticatedUserId,
-          userTo,
-          date,
-        )
-      }
-
+      // Step 2: Commit the transaction to save all DB changes
       await client.query('COMMIT')
 
-      // Match ka notification pehle ki tarah sirf tab jayega jab match hoga
-      if (finalAttraction.result) {
-        await notificationService.sendMatchNotification(
-          authenticatedUserId,
-          userTo,
-          finalAttraction.attractionId,
+      // Step 3: Send notifications AFTER the transaction is successfully committed.
+      // This prevents a notification failure from rolling back the database state.
+      try {
+        if (!isUpdate) {
+          // Send proposal notification on new attraction
+          await notificationService.sendAttractionProposalNotification(
+            authenticatedUserId,
+            userTo,
+            date,
+          )
+        }
+
+        // Send match notification only if there is a match result
+        if (finalAttraction.result) {
+          await notificationService.sendMatchNotification(
+            authenticatedUserId,
+            userTo,
+            finalAttraction.attractionId,
+          )
+        }
+      } catch (notificationError) {
+        // Log notification errors but don't fail the entire request,
+        // as the core action (attraction submission) was successful.
+        console.error(
+          '[CreateAttractionHandler] Notification failed to send after successful commit:',
+          notificationError,
         )
       }
 
+      // Step 4: Send a successful response to the client
       const statusCode =
         finalAttraction.createdAt?.getTime() === finalAttraction.updatedAt?.getTime() ? 201 : 200
       res.status(statusCode).json(finalAttraction)
     } catch (error: any) {
+      // If any DB operation fails, roll back the entire transaction
       await client.query('ROLLBACK')
       console.error('[CreateAttractionHandler] Transaction rolled back. Error:', error.message)
       if (error.code === 'INSUFFICIENT_FUNDS') {
@@ -113,6 +126,7 @@ export const createAttractionHandler = asyncHandler(
       }
       next(error)
     } finally {
+      // Always release the client back to the pool
       client.release()
     }
   },
