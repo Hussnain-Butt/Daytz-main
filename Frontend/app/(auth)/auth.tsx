@@ -1,4 +1,7 @@
-import React, { useEffect } from 'react';
+// File: AuthScreen.tsx (or similar name)
+// ✅ CORRECTED AND UPDATED
+
+import React from 'react';
 import {
   View,
   Text,
@@ -7,13 +10,11 @@ import {
   SafeAreaView,
   Image,
   ActivityIndicator,
-  Platform,
+  Alert,
 } from 'react-native';
-import { useRouter } from 'expo-router';
-import { useAuth } from '../../contexts/AuthContext'; // ** Ensure this path is correct **
+import { useAuth } from '../../contexts/AuthContext';
 
-// Logo - Check Path
-const logoPath = require('../../assets/brand.png'); // ** Ensure this path is correct **
+const logoPath = require('../../assets/brand.png');
 
 const AuthScreen = () => {
   const { login, isLoading } = useAuth();
@@ -21,13 +22,11 @@ const AuthScreen = () => {
   const handleLogin = async () => {
     if (isLoading) return;
     try {
-      console.log('Auth Screen: Initiating login via AuthContext...');
+      console.log('Auth Screen: Initiating login...');
       await login();
-      console.log('Auth Screen: Login process started. Waiting for AuthContext update.');
     } catch (error) {
-      // Corrected catch block
       console.error('Auth Screen: Login failed', error);
-      // Optional: Show an error message to the user here
+      Alert.alert('Login Error', 'An error occurred while trying to log in.');
     }
   };
 
@@ -36,6 +35,7 @@ const AuthScreen = () => {
       <View style={styles.innerContainer}>
         <Image source={logoPath} style={styles.logo} resizeMode="contain" />
         <Text style={styles.welcomeText}>Welcome to Daytz</Text>
+
         <TouchableOpacity
           style={[styles.loginButton, isLoading && styles.loginButtonDisabled]}
           onPress={handleLogin}
@@ -46,9 +46,12 @@ const AuthScreen = () => {
             <Text style={styles.loginButtonText}>Login / Sign Up</Text>
           )}
         </TouchableOpacity>
-        <Text style={styles.termsText}>
-          By continuing, you agree to our Terms of Service and Privacy Policy.
-        </Text>
+
+        <View style={styles.footer}>
+          <Text style={styles.termsText}>
+            By continuing, you agree to our Terms of Service and Privacy Policy.
+          </Text>
+        </View>
       </View>
     </SafeAreaView>
   );
@@ -63,7 +66,7 @@ const styles = StyleSheet.create({
     flex: 1,
     alignItems: 'center',
     justifyContent: 'center',
-    padding: 16,
+    padding: 20,
   },
   logo: {
     width: 180,
@@ -75,22 +78,21 @@ const styles = StyleSheet.create({
     fontWeight: 'bold',
     color: '#ffffff',
     marginTop: 6,
-    marginBottom: 12,
+    marginBottom: 24,
   },
   loginButton: {
-    minWidth: '60%',
-    maxWidth: 300,
+    width: '90%',
+    maxWidth: 320,
     alignItems: 'center',
     backgroundColor: '#06b6d4',
     borderRadius: 8,
     paddingVertical: 12,
     paddingHorizontal: 20,
-    marginTop: 12,
     height: 48,
     justifyContent: 'center',
   },
   loginButtonDisabled: {
-    backgroundColor: '#555d69', // A more distinct disabled color might be good
+    backgroundColor: '#0e7490',
     opacity: 0.7,
   },
   loginButtonText: {
@@ -98,9 +100,13 @@ const styles = StyleSheet.create({
     fontWeight: 'bold',
     color: '#ffffff',
   },
+  footer: {
+    position: 'absolute',
+    bottom: 30,
+    left: 20,
+    right: 20,
+  },
   termsText: {
-    marginTop: 16,
-    paddingHorizontal: 16,
     fontSize: 12,
     textAlign: 'center',
     color: '#9ca3af',

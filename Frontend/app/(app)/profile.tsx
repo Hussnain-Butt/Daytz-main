@@ -1,4 +1,5 @@
 // File: app/(app)/profile.tsx
+// ✅ COMPLETE AND FINAL UPDATED CODE
 
 import React, { useState, useEffect, useCallback, useRef } from 'react';
 import {
@@ -14,11 +15,10 @@ import {
   Text,
   Image,
   Modal,
-  TouchableOpacity,
   Alert,
-  // ✅ CHANGE: KeyboardAvoidingView aur StatusBar ko import karein
   KeyboardAvoidingView,
   StatusBar as RNStatusBar,
+  TouchableOpacity,
 } from 'react-native';
 import {
   Button,
@@ -42,22 +42,17 @@ import {
   purchaseTokens,
   getPlayableVideoUrl,
 } from '../../api/api';
-import { User } from '../../types/User';
+import { User, UpdateUserApiPayload } from '../../types/User';
 import { colors } from '../../utils/theme';
 import { useAuth } from '../../contexts/AuthContext';
 import { Video, ResizeMode, AVPlaybackStatusError, AVPlaybackStatusSuccess } from 'expo-av';
 
-// =====> ALERT KI TASVEEREIN IMPORT KAREIN (PATH THEEK KAREIN) <=====
 const calcHappyIcon = require('../../assets/calc-happy.png');
 const calcErrorIcon = require('../../assets/calc-error.png');
-// =====================================================================
 
-// --- NEW BUBBLE POPUP COMPONENT (UNCHANGED) ---
+// --- BUBBLE POPUP COMPONENT (UNCHANGED) ---
 const BubblePopup = ({ visible, type, title, message, buttonText, onClose }) => {
-  if (!visible) {
-    return null;
-  }
-  // (Component ka code waisa hi hai, isliye yahan se hata diya hai)
+  if (!visible) return null;
   const isSuccess = type === 'success';
   const imageSource = isSuccess ? calcHappyIcon : calcErrorIcon;
   const buttonStyle = isSuccess ? styles.successButton : styles.errorButton;
@@ -79,11 +74,6 @@ const BubblePopup = ({ visible, type, title, message, buttonText, onClose }) => 
     </Modal>
   );
 };
-// --- END OF BUBBLE POPUP COMPONENT ---
-
-// Baaki saara logic (functions, state, etc.) waisa hi hai.
-// Main sirf render functions aur styles mein changes kar raha hoon.
-// ... (All logic functions from original file are here) ...
 
 interface ImagePickerResult {
   uri: string;
@@ -98,7 +88,15 @@ const MAX_BIO_VIDEO_DURATION_MS = MAX_BIO_VIDEO_DURATION_SECONDS * 1000;
 
 const Profile = () => {
   const { auth0User: authUser, logout } = useAuth();
-  const { userProfile, setUserProfile, tokenBalance, setTokenBalance } = useUserStore();
+  // ✅ BADLAV: Global state aur setter ko yahan get karein
+  const {
+    userProfile,
+    setUserProfile,
+    tokenBalance,
+    setTokenBalance,
+    hasBeenForcedToProfileEdit,
+    setHasBeenForcedToProfileEdit,
+  } = useUserStore();
   const router = useRouter();
 
   const [isEditMode, setIsEditMode] = useState(false);
@@ -120,14 +118,10 @@ const Profile = () => {
     title: '',
     message: '',
   });
+  const [referralSource, setReferralSource] = useState('');
 
   const showPopup = (title: string, message: string, type: 'success' | 'error' = 'error') => {
-    setPopupState({
-      visible: true,
-      title,
-      message,
-      type,
-    });
+    setPopupState({ visible: true, title, message, type });
   };
 
   const fetchTokenBalance = useCallback(async () => {
@@ -187,22 +181,34 @@ const Profile = () => {
     fetchPlayableVimeoUrl();
   }, [fetchPlayableVimeoUrl]);
 
+  // ✅✅✅ --- YAHAN FIX KIYA GAYA HAI --- ✅✅✅
+  // useRef ko hata kar global state `hasBeenForcedToProfileEdit` ka istemal kiya gaya hai.
   useEffect(() => {
     if (userProfile) {
+      // Step 1: Hamesha form data ko user profile se sync karein.
       setEditedProfile({
         firstName: userProfile.firstName || '',
         lastName: userProfile.lastName || '',
         zipcode: userProfile.zipcode || '',
         enableNotifications: userProfile.enableNotifications ?? true,
       });
+
       const profileIsIncomplete = !userProfile.is_profile_complete;
       setIsInitialSetup(profileIsIncomplete);
-      setIsEditMode(profileIsIncomplete && !profileJustCompleted);
-    } else {
-      setIsEditMode(false);
-      setIsInitialSetup(false);
+
+      // Step 2: Sirf tabhi edit mode mein force karein jab profile incomplete ho
+      // AUR user ko pehle force na kiya gaya ho.
+      if (profileIsIncomplete && !hasBeenForcedToProfileEdit) {
+        console.log(
+          '[Profile] Profile is incomplete and user has not been forced to edit yet. Entering edit mode.'
+        );
+        setIsEditMode(true);
+        // Step 3: Global flag ko set karein taaki yeh dobara na ho.
+        setHasBeenForcedToProfileEdit(true);
+      }
     }
-  }, [userProfile, profileJustCompleted]);
+  }, [userProfile, hasBeenForcedToProfileEdit, setHasBeenForcedToProfileEdit]);
+  // ✅✅✅ --------------------------------- ✅✅✅
 
   const handleSelectedMedia = (asset: ImagePicker.ImagePickerAsset, type: 'Images' | 'Videos') => {
     if (type === 'Videos' && asset.duration && asset.duration > MAX_BIO_VIDEO_DURATION_MS) {
@@ -241,9 +247,7 @@ const Profile = () => {
         quality: 0.7,
         videoMaxDuration: type === 'Videos' ? MAX_BIO_VIDEO_DURATION_SECONDS : undefined,
       });
-      if (!result.canceled && result.assets?.[0]) {
-        handleSelectedMedia(result.assets[0], type);
-      }
+      if (!result.canceled && result.assets?.[0]) handleSelectedMedia(result.assets[0], type);
     } catch (e) {
       showPopup('Media Picker Error', (e as Error).message, 'error');
     }
@@ -263,9 +267,7 @@ const Profile = () => {
         quality: 0.7,
         videoMaxDuration: type === 'Videos' ? MAX_BIO_VIDEO_DURATION_SECONDS : undefined,
       });
-      if (!result.canceled && result.assets?.[0]) {
-        handleSelectedMedia(result.assets[0], type);
-      }
+      if (!result.canceled && result.assets?.[0]) handleSelectedMedia(result.assets[0], type);
     } catch (e) {
       showPopup('Camera Error', (e as Error).message, 'error');
     }
@@ -292,7 +294,6 @@ const Profile = () => {
       showPopup('Media Required', 'Upload bio video and profile picture.', 'error');
       return;
     }
-
     setIsSaving(true);
     try {
       let currentVideoUrl = userProfile.videoUrl;
@@ -311,7 +312,7 @@ const Profile = () => {
         if (res.data?.profilePictureUrl) currentPicUrl = res.data.profilePictureUrl;
         else if (wasInitialProfileIncomplete) throw new Error('Profile picture upload failed.');
       }
-      const updatePayload: Partial<User> = {
+      const updatePayload: UpdateUserApiPayload = {
         firstName: editedProfile.firstName?.trim(),
         lastName: editedProfile.lastName?.trim(),
         zipcode: editedProfile.zipcode?.trim(),
@@ -326,19 +327,26 @@ const Profile = () => {
           currentPicUrl
         ),
       };
+      if (wasInitialProfileIncomplete && referralSource.trim()) {
+        updatePayload.referralSource = referralSource.trim();
+      }
       const res = await updateUser(updatePayload);
       if (res.data) {
+        const oldTokenBalance = tokenBalance ?? userProfile.tokens ?? 0;
+        const newTokenBalance = res.data.tokens;
+        const gotBonus = newTokenBalance > oldTokenBalance;
         setUserProfile(res.data);
-        showPopup(
-          'Success!',
+        let successMessage =
           wasInitialProfileIncomplete && res.data.is_profile_complete
             ? 'Profile Setup Complete!'
-            : 'Profile updated successfully!',
-          'success'
-        );
-        if (wasInitialProfileIncomplete && res.data.is_profile_complete)
+            : 'Profile updated successfully!';
+        if (gotBonus) {
+          successMessage += ` You received 10 bonus coins!`;
+        }
+        showPopup('Success!', successMessage, 'success');
+        if (wasInitialProfileIncomplete && res.data.is_profile_complete) {
           setProfileJustCompleted(true);
-        else setProfileJustCompleted(false);
+        }
         setIsEditMode(false);
         setImage(null);
         setVideo(null);
@@ -404,7 +412,6 @@ const Profile = () => {
   );
 
   const renderEditableUserInfo = () => (
-    // ✅ CHANGE: KeyboardAvoidingView ko yahan add kiya gaya hai
     <KeyboardAvoidingView
       style={styles.flexContainer}
       behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
@@ -413,7 +420,6 @@ const Profile = () => {
         style={styles.scrollView}
         contentContainerStyle={styles.scrollContent}
         keyboardShouldPersistTaps="handled">
-        {/* Baaki content waisa hi hai */}
         <View style={styles.userInfoContainer}>
           {isInitialSetup && !profileJustCompleted && (
             <Text style={styles.setupTitle}>Complete Your Profile</Text>
@@ -507,6 +513,21 @@ const Profile = () => {
             placeholderTextColor={colors.LightGrey}
           />
           {!editedProfile.zipcode?.trim() && <Text style={styles.requiredText}>* Required</Text>}
+          {isInitialSetup && (
+            <>
+              <Divider style={styles.divider} />
+              <Text style={styles.fieldLabel}>How did you hear about us? (Optional)</Text>
+              <TextInput
+                style={styles.textInput}
+                value={referralSource}
+                onChangeText={setReferralSource}
+                placeholder="e.g., Instagram, Friend, App Store..."
+                editable={!isSaving}
+                placeholderTextColor={colors.LightGrey}
+              />
+              <Text style={styles.helperText}>Answer for 10 bonus coins!</Text>
+            </>
+          )}
           <View style={styles.switchContainer}>
             <Text style={styles.switchLabel}>Notifications:</Text>
             <Switch
@@ -518,7 +539,6 @@ const Profile = () => {
                 true: colors.GoldPrimary || '#FFD700',
               }}
               thumbColor={colors.White || '#FFFFFF'}
-              // ✅ CHANGE: iOS par switch ka background color hatane ke liye
               style={Platform.OS === 'ios' ? { backgroundColor: 'transparent' } : {}}
             />
           </View>
@@ -534,43 +554,39 @@ const Profile = () => {
                 ? 'Save & View Profile'
                 : 'Save Changes'}
           </Button>
-          {(!isInitialSetup || profileJustCompleted) && (
-            <Button
-              mode="text"
-              style={styles.cancelButton}
-              onPress={() => {
-                setIsEditMode(false);
-                setProfileJustCompleted(false);
-                setImage(null);
-                setVideo(null);
-                if (userProfile)
-                  setEditedProfile({
-                    firstName: userProfile.firstName || '',
-                    lastName: userProfile.lastName || '',
-                    zipcode: userProfile.zipcode || '',
-                    enableNotifications: userProfile.enableNotifications ?? true,
-                  });
-              }}
-              disabled={isSaving}
-              textColor={colors.LightGrey || '#A0A0A0'}>
-              Cancel
-            </Button>
-          )}
+          <Button
+            mode="text"
+            style={styles.cancelButton}
+            onPress={() => {
+              setIsEditMode(false);
+              setProfileJustCompleted(false);
+              setImage(null);
+              setVideo(null);
+              if (userProfile)
+                setEditedProfile({
+                  firstName: userProfile.firstName || '',
+                  lastName: userProfile.lastName || '',
+                  zipcode: userProfile.zipcode || '',
+                  enableNotifications: userProfile.enableNotifications ?? true,
+                });
+            }}
+            disabled={isSaving}
+            textColor={colors.LightGrey || '#A0A0A0'}>
+            Cancel
+          </Button>
         </View>
       </ScrollView>
     </KeyboardAvoidingView>
   );
 
   const renderUserInfo = () => {
-    // ... (This function remains unchanged) ...
-    if (!userProfile) {
+    if (!userProfile)
       return (
         <View style={styles.loadingContainer}>
           <ActivityIndicator size="large" />
           <Text style={styles.loadingText}>Loading Profile...</Text>
         </View>
       );
-    }
     const showMagicBuyButton = tokenBalance !== null && tokenBalance < 10;
     return (
       <ScrollView style={styles.scrollView} contentContainerStyle={styles.scrollContent}>
@@ -645,8 +661,7 @@ const Profile = () => {
                   isLooping={false}
                   onError={(errorMsg: string) => setVideoPlaybackError(`Could not play video.`)}
                   onLoad={(status) => {
-                    if (((status as AVPlayback) - StatusSuccess).isLoaded)
-                      setVideoPlaybackError(null);
+                    if ((status as AVPlaybackStatusSuccess).isLoaded) setVideoPlaybackError(null);
                   }}
                   onPlaybackStatusUpdate={(status) => {
                     if ((status as AVPlaybackStatusError).error)
@@ -696,12 +711,10 @@ const Profile = () => {
               Finish
             </Button>
           )}
-          {!profileJustCompleted && (
-            <Button mode="contained" onPress={() => setIsEditMode(true)} style={styles.editButton}>
-              Edit Profile
-            </Button>
-          )}
-          {userProfile.is_profile_complete && !profileJustCompleted && (
+          <Button mode="contained" onPress={() => setIsEditMode(true)} style={styles.editButton}>
+            Edit Profile
+          </Button>
+          {userProfile.is_profile_complete && (
             <Button
               style={styles.calendarButton}
               mode="contained"
@@ -745,17 +758,12 @@ const Profile = () => {
 };
 
 const styles = StyleSheet.create({
-  // ✅ CHANGE: Yeh naya style add kiya gaya hai
-  flexContainer: {
-    flex: 1,
-  },
-  // ✅ CHANGE: paddingTop ko platform ke hisab se set kiya gaya hai
+  flexContainer: { flex: 1 },
   container: {
     flex: 1,
     backgroundColor: colors.Background || '#121212',
     paddingTop: Platform.OS === 'android' ? RNStatusBar.currentHeight : 0,
   },
-  // Baaki sabhi styles waisay hi hain...
   loadingContainer: {
     flex: 1,
     justifyContent: 'center',
@@ -1017,13 +1025,7 @@ const styles = StyleSheet.create({
     paddingHorizontal: 20,
   },
   popupContainer: { alignItems: 'center', width: '100%', maxWidth: 350 },
-  popupImage: {
-    width: 220,
-    height: 220,
-    resizeMode: 'contain',
-    zIndex: 1,
-    marginBottom: -80,
-  },
+  popupImage: { width: 220, height: 220, resizeMode: 'contain', zIndex: 1, marginBottom: -80 },
   bubble: {
     width: '90%',
     backgroundColor: '#FFFFFF',
@@ -1057,21 +1059,18 @@ const styles = StyleSheet.create({
     paddingHorizontal: 40,
     alignItems: 'center',
   },
-  errorButton: {
-    backgroundColor: colors.PinkPrimary || '#FF6B6B',
-  },
-  successButton: {
-    backgroundColor: colors.GoldPrimary || '#FFD700',
-  },
-  errorButtonText: {
-    color: colors.White || '#FFFFFF',
-    fontSize: 15,
-    fontWeight: 'bold',
-  },
-  successButtonText: {
-    color: colors.Black || '#000000',
-    fontSize: 15,
-    fontWeight: 'bold',
+  errorButton: { backgroundColor: colors.PinkPrimary || '#FF6B6B' },
+  successButton: { backgroundColor: colors.GoldPrimary || '#FFD700' },
+  errorButtonText: { color: colors.White || '#FFFFFF', fontSize: 15, fontWeight: 'bold' },
+  successButtonText: { color: colors.Black || '#000000', fontSize: 15, fontWeight: 'bold' },
+  helperText: {
+    color: colors.GoldPrimary || '#FFD700',
+    fontSize: 13,
+    alignSelf: 'flex-start',
+    marginLeft: 5,
+    marginTop: -2,
+    marginBottom: 8,
+    fontStyle: 'italic',
   },
 });
 

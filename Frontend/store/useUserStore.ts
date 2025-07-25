@@ -1,5 +1,5 @@
 // File: store/useUserStore.ts
-// ✅ 100% COMPLETE AND FINAL CORRECTED CODE
+// ✅ COMPLETE AND FINAL UPDATED CODE
 
 import { create } from 'zustand';
 import { User } from '../types/User';
@@ -14,7 +14,9 @@ interface UserState {
   isFetchingUserProfile: boolean;
   profileJustCompletedForNav: boolean;
   showThankYouAfterAuth: boolean;
-  showWelcomeVideo: boolean; // ✅ NAYI STATE
+  showWelcomeVideo: boolean;
+  // ✅ NAYI STATE: Yeh yaad rakhegi ki kya user ko edit mode mein force kiya ja chuka hai.
+  hasBeenForcedToProfileEdit: boolean;
 
   setUserProfile: (profile: User | null) => void;
   updateUserProfileOptimistic: (updates: Partial<User>) => void;
@@ -25,7 +27,9 @@ interface UserState {
   setProfileJustCompletedForNav: (isCompleted: boolean) => void;
   setShowThankYouAfterAuth: (show: boolean) => void;
   clearShowThankYouAfterAuth: () => void;
-  setShowWelcomeVideo: (show: boolean) => void; // ✅ NAYA SETTER
+  setShowWelcomeVideo: (show: boolean) => void;
+  // ✅ NAYA SETTER
+  setHasBeenForcedToProfileEdit: (hasBeenForced: boolean) => void;
 }
 
 // 2. Create the store
@@ -38,7 +42,8 @@ export const useUserStore = create<UserState>((set) => ({
   isFetchingUserProfile: false,
   profileJustCompletedForNav: false,
   showThankYouAfterAuth: false,
-  showWelcomeVideo: false, // ✅ Default value
+  showWelcomeVideo: false,
+  hasBeenForcedToProfileEdit: false, // ✅ Default value
 
   // --- Actions ---
   setUserProfile: (profile) => {
@@ -82,7 +87,8 @@ export const useUserStore = create<UserState>((set) => ({
       isFetchingUserProfile: false,
       profileJustCompletedForNav: false,
       showThankYouAfterAuth: false,
-      showWelcomeVideo: false, // ✅ Yahan bhi reset karein
+      showWelcomeVideo: false,
+      hasBeenForcedToProfileEdit: false, // ✅ Logout par reset karein
     });
   },
 
@@ -95,8 +101,10 @@ export const useUserStore = create<UserState>((set) => ({
     console.log('useUserStore: Clearing showThankYouAfterAuth flag.');
     set({ showThankYouAfterAuth: false });
   },
-  // ✅ NAYA SETTER FUNCTION
   setShowWelcomeVideo: (show) => set({ showWelcomeVideo: show }),
+  // ✅ NAYA SETTER FUNCTION
+  setHasBeenForcedToProfileEdit: (hasBeenForced) =>
+    set({ hasBeenForcedToProfileEdit: hasBeenForced }),
 }));
 
 // --- Helper Functions (No changes needed here) ---

@@ -1,4 +1,6 @@
 // File: app/(auth)/login.tsx
+// ✅ CORRECTED AND UPDATED
+
 import React, { useEffect } from 'react';
 import {
   StyleSheet,
@@ -8,26 +10,25 @@ import {
   TouchableOpacity,
   SafeAreaView,
   ActivityIndicator,
-  Dimensions,
   Alert,
 } from 'react-native';
-import { useRouter } from 'expo-router';
-import { useAuth } from '../../contexts/AuthContext'; // ** Ensure this path is correct **
+import { useAuth } from '../../contexts/AuthContext';
 import { deleteItemAsync } from 'expo-secure-store';
 
-// Logo - Update path if necessary
-const logoPath = require('../../assets/brand.png'); // ** Ensure this path is correct **
+const logoPath = require('../../assets/brand.png');
+
+// This is the session key used in AuthContext.tsx
+const AUTH_SESSION_KEY = 'daytzFinalAuthSession_v1';
 
 const LoginScreen = () => {
-  const { login, isLoading, user } = useAuth();
-  const router = useRouter();
+  // Correctly destructure auth0User from the context
+  const { login, isLoading, auth0User } = useAuth();
 
-  // For debugging - show if user is already logged in
   useEffect(() => {
-    if (user) {
-      console.log('Login Screen: User is already authenticated:', user.sub);
+    if (auth0User) {
+      console.log('Login Screen: User is already authenticated:', auth0User.sub);
     }
-  }, [user]);
+  }, [auth0User]);
 
   const handleLogin = async () => {
     if (isLoading) return;
@@ -37,22 +38,18 @@ const LoginScreen = () => {
       console.log('Login Screen: Login process started. Waiting for AuthContext update.');
     } catch (error) {
       console.error('Login Screen: Login failed', error);
-      // Maybe show an alert here
+      Alert.alert('Login Error', 'An unexpected error occurred during login.');
     }
   };
 
-  const handleTestDeepLink = () => {
-    router.push('/DeepLinkTest');
-  };
-
-  // Temporary function to clear stored credentials
-  const handleClearCredentials = async () => {
+  // Temporary debug function to clear the correct session key
+  const handleClearSession = async () => {
     try {
-      await deleteItemAsync('daytzAuthCredentials_v3');
-      Alert.alert('Success', 'Credentials cleared! Please restart the app.', [{ text: 'OK' }]);
+      await deleteItemAsync(AUTH_SESSION_KEY);
+      Alert.alert('Success', 'Stored session cleared! Please restart the app.', [{ text: 'OK' }]);
     } catch (error) {
-      console.error('Error clearing credentials:', error);
-      Alert.alert('Error', 'Failed to clear credentials');
+      console.error('Error clearing session:', error);
+      Alert.alert('Error', 'Failed to clear session.');
     }
   };
 
@@ -62,8 +59,10 @@ const LoginScreen = () => {
         <Image source={logoPath} style={styles.logo} resizeMode="contain" />
         <Text style={styles.welcomeText}>Welcome to Daytz</Text>
 
-        {user && (
-          <Text style={styles.debugText}>Already logged in as: {user.email || user.sub}</Text>
+        {auth0User && (
+          <Text style={styles.debugText}>
+            Already logged in as: {auth0User.email || auth0User.sub}
+          </Text>
         )}
 
         <TouchableOpacity
@@ -139,26 +138,15 @@ const styles = StyleSheet.create({
     color: '#9ca3af',
     textAlign: 'center',
     lineHeight: 18,
-  },
-  testButton: {
-    backgroundColor: '#374151',
-    borderRadius: 8,
-    paddingVertical: 12,
-    paddingHorizontal: 20,
-    width: '100%',
-    alignItems: 'center',
-    justifyContent: 'center',
-    marginBottom: 20,
-  },
-  testButtonText: {
-    fontSize: 14,
-    fontWeight: 'bold',
-    color: '#9ca3af',
+    position: 'absolute',
+    bottom: 30,
+    left: 40,
+    right: 40,
   },
   clearButton: {
-    backgroundColor: '#dc2626',
+    backgroundColor: '#be123c',
     borderRadius: 8,
-    paddingVertical: 12,
+    paddingVertical: 10,
     paddingHorizontal: 20,
     width: '100%',
     alignItems: 'center',

@@ -1,5 +1,4 @@
-// File: app/(app)/calendar.tsx
-// ✅ COMPLETE AND FINAL UPDATED FILE (REMOVED COIN DISPLAY, PROFILE ICON, PROFESSIONAL TOP BAR ALIGNMENT)
+// ✅ COMPLETE AND FINAL UPDATED FILE
 
 import React, { useState, useCallback, useEffect } from 'react';
 import {
@@ -207,7 +206,8 @@ const UpcomingDateItem = ({
     item.sexualRating,
     item.friendshipRating
   );
-  const canGiveFeedback = isPast(parseISO(item.date)) && !item.myOutcome;
+  const canGiveFeedback =
+    item.status === 'approved' && isPast(parseISO(item.date)) && !item.myOutcome;
   const hasGivenFeedback = !!item.myOutcome;
 
   return (
@@ -233,7 +233,7 @@ const UpcomingDateItem = ({
       <View style={styles.statusSection}>
         <View style={styles.statusContainer}>
           <Ionicons name="checkmark-circle" size={20} color={colors.Success} />
-          <Text style={styles.statusText}>Approved</Text>
+          <Text style={styles.statusText}>Confirmed</Text>
         </View>
         {canGiveFeedback && (
           <TouchableOpacity style={styles.rateButton} onPress={() => onRatePress(item)}>
@@ -248,7 +248,7 @@ const UpcomingDateItem = ({
 
 // --- Main Screen ---
 const CalendarHomeScreen = () => {
-  const { auth0User, logout, isReady: isAuthReady, isLoading: isAuthLoading } = useAuth();
+  const { auth0User, isReady: isAuthReady, isLoading: isAuthLoading } = useAuth();
   const { userProfile } = useUserStore();
   const router = useRouter();
 
@@ -271,7 +271,7 @@ const CalendarHomeScreen = () => {
     setPopupState({ visible: true, type, title, message });
 
   const fetchAllScreenData = useCallback(async () => {
-    if (!auth0User?.sub) {
+    if (!auth0User?.sub || !userProfile?.userId) {
       setIsCalendarLoading(false);
       setIsUpcomingLoading(false);
       return;
@@ -280,61 +280,70 @@ const CalendarHomeScreen = () => {
       setIsCalendarLoading(true);
       setIsUpcomingLoading(true);
     }
+
     try {
       const [calRes, upRes, countRes] = await Promise.all([
         getCalendarDaysByUserId(),
         getUpcomingDates(),
         getUnreadNotificationsCount(),
       ]);
-      setCalendarData(calRes.data);
-      setUpcomingDates(
-        upRes.data.map((d) => ({ ...d, romanticRating: 0, sexualRating: 0, friendshipRating: 0 }))
-      );
+
+      const initialDates = upRes.data;
       setUnreadCount(countRes.data.unreadCount);
-    } catch {
+      setCalendarData(calRes.data);
+
+      if (initialDates.length > 0) {
+        const attractionPromises = initialDates
+          .filter((d) => d.status === 'approved')
+          .map((d) => {
+            const from =
+              d.userFrom === userProfile.userId ? userProfile.userId : d.otherUser.userId;
+            const to = from === userProfile.userId ? d.otherUser.userId : userProfile.userId;
+            return getAttractionByUserFromUserToAndDate(
+              from,
+              to,
+              format(parseISO(d.date), 'yyyy-MM-dd')
+            ).catch(() => null);
+          });
+
+        const attractionResults = await Promise.all(attractionPromises);
+
+        const datesWithAttraction = initialDates.map((d) => {
+          const attractionResult = attractionResults.find(
+            (r) =>
+              r &&
+              format(parseISO(r.data.date), 'yyyy-MM-dd') === format(parseISO(d.date), 'yyyy-MM-dd')
+          );
+          if (attractionResult?.data) {
+            return {
+              ...d,
+              romanticRating: attractionResult.data.romanticRating || 0,
+              sexualRating: attractionResult.data.sexualRating || 0,
+              friendshipRating: attractionResult.data.friendshipRating || 0,
+            };
+          }
+          return { ...d, romanticRating: 0, sexualRating: 0, friendshipRating: 0 };
+        });
+
+        setUpcomingDates(datesWithAttraction);
+      } else {
+        setUpcomingDates([]);
+      }
+    } catch (error) {
+      console.error('Failed to fetch screen data:', error);
       showPopup('Load Failed', 'Could not load your calendar data. Please try again.', 'error');
     } finally {
       setIsCalendarLoading(false);
       setIsUpcomingLoading(false);
       setIsRefreshing(false);
     }
-  }, [auth0User, isRefreshing]);
+  }, [auth0User, isRefreshing, userProfile]);
 
   useFocusEffect(
     useCallback(() => {
       if (isAuthReady && !isAuthLoading) fetchAllScreenData();
     }, [isAuthReady, isAuthLoading, fetchAllScreenData])
   );
-
-  useEffect(() => {
-    const loadAttractions = async () => {
-      if (!userProfile?.userId || upcomingDates.length === 0) return;
-      const promises = upcomingDates.map((d) => {
-        const from = d.userFrom === userProfile.userId ? userProfile.userId : d.otherUser.userId;
-        const to = from === userProfile.userId ? d.otherUser.userId : userProfile.userId;
-        return getAttractionByUserFromUserToAndDate(
-          from,
-          to,
-          format(parseISO(d.date), 'yyyy-MM-dd')
-        ).catch(() => null);
-      });
-      const results = await Promise.all(promises);
-      setUpcomingDates(
-        upcomingDates.map((d, i) => {
-          const data = results[i]?.data;
-          return data
-            ? {
-                ...d,
-                romanticRating: data.romanticRating || 0,
-                sexualRating: data.sexualRating || 0,
-                friendshipRating: data.friendshipRating || 0,
-              }
-            : d;
-        })
-      );
-    };
-    loadAttractions();
-  }, [upcomingDates, userProfile]);
 
   const onRefresh = useCallback(() => {
     setIsRefreshing(true);
@@ -400,7 +409,7 @@ const CalendarHomeScreen = () => {
         </View>
         <View style={styles.headerGroupRight}>
           <TouchableOpacity style={styles.iconButton} onPress={() => router.push('/(app)/profile')}>
-            <Ionicons name="person-outline" size={24} color={colors.White} />
+            <Ionicons name="person-outline" size={26} color={colors.White} />
           </TouchableOpacity>
           <TouchableOpacity
             style={styles.iconButton}
@@ -408,15 +417,12 @@ const CalendarHomeScreen = () => {
               setUnreadCount(0);
               router.push('/(app)/notifications');
             }}>
-            <Ionicons name="notifications-outline" size={24} color={colors.White} />
+            <Ionicons name="notifications-outline" size={26} color={colors.White} />
             {unreadCount > 0 && (
               <View style={styles.notificationBadge}>
                 <Text style={styles.notificationBadgeText}>{unreadCount}</Text>
               </View>
             )}
-          </TouchableOpacity>
-          <TouchableOpacity style={styles.iconButton} onPress={logout}>
-            <Ionicons name="log-out-outline" size={24} color={colors.PinkPrimary} />
           </TouchableOpacity>
         </View>
       </View>
@@ -435,28 +441,36 @@ const CalendarHomeScreen = () => {
           </View>
         ) : (
           <View style={styles.calendarGridContainer}>
-            <VideoCalendar user={auth0User} calendarData={calendarData} />
+            <VideoCalendar
+              user={auth0User}
+              calendarData={calendarData}
+              plannedDates={upcomingDates}
+            />
           </View>
         )}
         <View style={styles.upcomingSection}>
-          <Text style={styles.upcomingTitle}>Upcoming & Past Dates</Text>
+          <Text style={styles.upcomingTitle}>Upcoming & Past Plans</Text>
           {isUpcomingLoading && upcomingDates.length === 0 ? (
             <ActivityIndicator color={colors.White} style={{ marginTop: 20 }} />
-          ) : upcomingDates.length > 0 ? (
+          ) : upcomingDates.some((d) => d.status === 'approved') ? (
             <View style={styles.listContainer}>
-              {upcomingDates.map((item, idx) => (
-                <React.Fragment key={item.dateId}>
-                  <UpcomingDateItem
-                    item={item}
-                    onPress={handleDateItemPress}
-                    onRatePress={handleRatePress}
-                  />
-                  {idx < upcomingDates.length - 1 && <View style={styles.separator} />}
-                </React.Fragment>
-              ))}
+              {upcomingDates
+                .filter((item) => item.status === 'approved')
+                .map((item, idx) => (
+                  <React.Fragment key={item.dateId}>
+                    <UpcomingDateItem
+                      item={item}
+                      onPress={handleDateItemPress}
+                      onRatePress={handleRatePress}
+                    />
+                    {idx < upcomingDates.filter((i) => i.status === 'approved').length - 1 && (
+                      <View style={styles.separator} />
+                    )}
+                  </React.Fragment>
+                ))}
             </View>
           ) : (
-            <Text style={styles.noUpcomingText}>No dates scheduled.</Text>
+            <Text style={styles.noUpcomingText}>No confirmed plans scheduled.</Text>
           )}
         </View>
       </ScrollView>
@@ -492,14 +506,18 @@ const styles = StyleSheet.create({
     paddingVertical: 10,
   },
   headerGroupLeft: { flexDirection: 'row', alignItems: 'center' },
-  headerGroupRight: { flexDirection: 'row', alignItems: 'center' },
+  headerGroupRight: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 20,
+  },
   logoImage: { width: 100, height: 30, resizeMode: 'contain' },
-  iconButton: { marginLeft: 15 },
+  iconButton: {},
   notificationBadge: {
     position: 'absolute',
     top: -4,
     right: -4,
-    backgroundColor: colors.Red || '#F46A6A',
+    backgroundColor: '#F46A6A',
     borderRadius: 9,
     width: 18,
     height: 18,
@@ -537,7 +555,7 @@ const styles = StyleSheet.create({
     color: colors.PinkPrimary || '#ff149d',
     fontWeight: '600',
   },
-  statusSection: { alignItems: 'center', marginLeft: 10 },
+  statusSection: { alignItems: 'center', marginLeft: 10, width: 90 },
   statusContainer: {
     flexDirection: 'row',
     alignItems: 'center',
@@ -558,6 +576,8 @@ const styles = StyleSheet.create({
     borderRadius: 10,
     paddingVertical: 5,
     paddingHorizontal: 12,
+    width: '100%',
+    alignItems: 'center',
   },
   rateButtonText: { color: colors.White || '#FFFFFF', fontSize: 12, fontWeight: 'bold' },
   feedbackSentText: {

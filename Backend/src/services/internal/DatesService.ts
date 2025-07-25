@@ -1,5 +1,5 @@
 // File: src/services/internal/DatesService.ts
-// ✅ COMPLETE AND FINAL UPDATED CODE
+// ✅ COMPLETE AND FINAL CODE (NO CHANGES NEEDED)
 
 import pool from '../../db'
 import { PoolClient } from 'pg'
@@ -115,10 +115,6 @@ class DatesService {
         client,
       )
 
-      // ✅ --- THIS IS THE FIX ---
-      // The notification for a new date proposal MUST always go to the person being invited.
-      // We ignore `firstMessageRights` here because that's for messaging, not for proposals.
-      // The recipient is `userTo` from the original payload.
       const notificationRecipientId = userTo
 
       console.log(
@@ -127,7 +123,7 @@ class DatesService {
 
       await this.notificationService.sendDateProposalNotification(
         proposerUserId,
-        notificationRecipientId, // ALWAYS notify the person being asked out.
+        notificationRecipientId,
         {
           dateId: dateEntry.dateId,
           date: dateEntry.date,
@@ -152,8 +148,6 @@ class DatesService {
     }
   }
 
-  // --- Other methods remain unchanged ---
-
   async getDateEntryById(dateId: number): Promise<DateType | null> {
     return this.datesRepository.getDateEntryById(dateId)
   }
@@ -174,6 +168,7 @@ class DatesService {
     return this.datesRepository.updateDateEntry(dateId, dateEntry)
   }
 
+  // This method now correctly gets both pending and approved dates because the repository does.
   async getUpcomingDatesByUserId(userId: string): Promise<UpcomingDate[]> {
     return this.datesRepository.getUpcomingDatesByUserId(userId)
   }

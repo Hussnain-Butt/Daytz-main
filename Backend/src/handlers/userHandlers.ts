@@ -34,6 +34,7 @@ export const createUserHandler = asyncHandler(
     }
 
     try {
+      // Step 1: Check if user already exists in our database
       const existingUser = await userService.getUserById(auth0UserId)
       if (existingUser) {
         console.log(
@@ -42,21 +43,28 @@ export const createUserHandler = asyncHandler(
         return res.status(200).json(existingUser)
       }
 
+      // Step 2: If user does not exist, proceed with creation
+      console.log(`[CreateUser] New user flow initiated for Auth0 ID: ${auth0UserId}`)
       const { email } = req.body
       if (!email || typeof email !== 'string') {
-        return res.status(400).json({ message: 'Email is required.' })
+        return res.status(400).json({ message: 'Email is required for new user creation.' })
       }
 
       const newUserInternalData: CreateUserInternalData = { userId: auth0UserId, ...req.body }
       const createdUser = await userService.createUser(newUserInternalData)
-      if (!createdUser) {
-        throw new Error('User creation failed unexpectedly in service.')
+
+      // Step 3: Verify that the user was actually created before sending a success response.
+      if (!createdUser || !createdUser.userId) {
+        console.error(
+          `[CreateUser] CRITICAL: UserService.createUser returned null or invalid data for Auth0 ID ${auth0UserId}.`,
+        )
+        throw new Error('User creation failed unexpectedly in the service layer.')
       }
 
-      console.log(`[CreateUser] User ${auth0UserId} created successfully.`)
+      console.log(`[CreateUser] User ${auth0UserId} created successfully in database.`)
       res.status(201).json(createdUser)
     } catch (error: any) {
-      console.error(`[CreateUser] Error for Auth0 User ${auth0UserId}:`, error)
+      console.error(`[CreateUser] Error processing request for Auth0 User ${auth0UserId}:`, error)
       if (error.message?.includes('users_email_key')) {
         return res.status(409).json({ message: 'Email already in use.' })
       }
@@ -169,14 +177,12 @@ export const uploadHomepageVideoHandler = asyncHandler(
           throw new Error('Failed to update user with new video URL.')
         }
 
-        res
-          .status(200)
-          .json({
-            message: 'Homepage video uploaded.',
-            videoUrl: vimeoResult.pageLink,
-            vimeoUri: vimeoResult.uri,
-            user: updatedUser,
-          })
+        res.status(200).json({
+          message: 'Homepage video uploaded.',
+          videoUrl: vimeoResult.pageLink,
+          vimeoUri: vimeoResult.uri,
+          user: updatedUser,
+        })
       } catch (error: any) {
         res.status(500).json({ message: error.message || 'Video processing failed.' })
       } finally {
@@ -233,6 +239,16 @@ export const uploadProfilePictureHandler = asyncHandler(
 
         const imageExtension = path.extname(req.file.originalname).toLowerCase() || '.png'
         const newImageS3Key = `user-${userId}/profile-${Date.now()}${imageExtension}`
+
+        // ✅✅✅ --- THIS IS THE FIX --- ✅✅✅
+        // A "wrapper function" is created to bridge the type mismatch.
+        // It takes a `Partial<User>` and passes it to `userService.updateUser` which now expects `UpdateUserPayload`.
+        const updateUserForUpload = (id: string, data: Partial<User>): Promise<User | null> => {
+          // We cast `data` to `UpdateUserPayload`. This is safe because `uploadImageHandler` only
+          // adds `profilePictureUrl`, which is a valid field in `UpdateUserPayload`.
+          return userService.updateUser(id, data as UpdateUserPayload)
+        }
+
         await uploadImageHandler(
           req,
           res,
@@ -241,8 +257,10 @@ export const uploadProfilePictureHandler = asyncHandler(
           s3BucketName,
           newImageS3Key,
           'profilePictureUrl',
-          userService.updateUser.bind(userService),
+          // The wrapper function is passed instead of the original service method.
+          updateUserForUpload,
         )
+        // ✅✅✅ --- END OF FIX --- ✅✅✅
       } catch (error) {
         if (!res.headersSent) next(error)
       } finally {
@@ -281,18 +299,14 @@ export const deleteProfilePictureHandler = asyncHandler(
   },
 )
 
-// ✅ --- THIS IS THE FIX ---
-// The handler now correctly expects 'token' from the request body to match the frontend API call.
 export const registerPushTokenHandler = asyncHandler(
   async (req: CustomRequest, res: Response, next: NextFunction) => {
     const userId = req.userId
-    // We expect 'token' from the body, as sent by the frontend API call.
     const { token } = req.body
 
     if (!userId) {
       return res.status(401).json({ message: 'User not authenticated.' })
     }
-    // Updated validation to check for 'token' instead of 'playerId'.
     if (!token || typeof token !== 'string') {
       return res
         .status(400)
@@ -300,8 +314,6 @@ export const registerPushTokenHandler = asyncHandler(
     }
 
     try {
-      // The repository method is named 'registerPushToken', but it now saves the FCM token.
-      // We pass the received token to the repository.
       const success = await userRepository.registerPushToken(userId, token)
       if (!success) {
         return res.status(404).json({ message: 'User not found or token registration failed.' })

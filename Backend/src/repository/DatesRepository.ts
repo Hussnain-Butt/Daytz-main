@@ -26,13 +26,10 @@ const mapRowToDate = (row: any): DateType | null => {
 }
 
 class DatesRepository {
-  // ✅ --- THIS IS THE FIX ---
-  // The `createDateEntry` method now accepts an optional `client` argument.
   async createDateEntry(
     dateEntry: CreateDateInternal,
     client: PoolClient | null = null,
   ): Promise<DateType> {
-    // If a client is passed, use it; otherwise, use the main pool.
     const db = client || pool
     const query = `INSERT INTO dates (date, time, user_from, user_to, user_from_approved, user_to_approved, location_metadata, status) VALUES ($1, $2, $3, $4, $5, $6, $7, $8) RETURNING *`
     const values = [
@@ -53,8 +50,6 @@ class DatesRepository {
     return newDate
   }
 
-  // --- Other methods remain unchanged ---
-
   async getDateEntryByIdWithUserDetails(dateId: number): Promise<any | null> {
     const query = `
       SELECT 
@@ -71,12 +66,15 @@ class DatesRepository {
     return humps.camelizeKeys(rows[0])
   }
 
+  // ✅ --- THIS IS THE FIX ---
+  // The SQL query is updated to fetch dates with 'approved' OR 'pending' status.
   async getUpcomingDatesByUserId(userId: string): Promise<UpcomingDate[]> {
     const query = `
       SELECT
         d.date_id as "dateId", 
         d.date, 
         d.time,
+        d.status, -- ✅ Selecting the status field for the frontend
         d.updated_at as "updatedAt",
         d.location_metadata as "locationMetadata",
         d.user_from as "userFrom",
@@ -94,7 +92,7 @@ class DatesRepository {
       JOIN users ut ON d.user_to = ut.user_id
       LEFT JOIN date_feedback AS feedback ON feedback.date_id = d.date_id AND feedback.user_id = $1
       WHERE (d.user_from = $1 OR d.user_to = $1)
-      AND d.status = 'approved'
+      AND d.status IN ('approved', 'pending') -- ✅ Fetching both pending and approved dates
       ORDER BY d.date DESC, d.time DESC;
     `
     const { rows } = await pool.query(query, [userId])

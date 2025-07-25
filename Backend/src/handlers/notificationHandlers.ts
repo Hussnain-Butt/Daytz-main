@@ -1,5 +1,5 @@
 // File: src/handlers/notificationHandlers.ts
-// ✅ COMPLETE AND FINAL UPDATED CODE
+// ✅ COMPLETE AND FINAL CODE (NO CHANGES NEEDED)
 
 import { Response } from 'express'
 import { asyncHandler, CustomRequest } from '../middleware'
@@ -13,7 +13,6 @@ export const getMyNotificationsHandler = asyncHandler(async (req: CustomRequest,
   }
 
   try {
-    // ✅✅✅ FIX: Query updated to select proposing_user_id ✅✅✅
     const query = `
       SELECT 
         notification_id, 

@@ -1,5 +1,5 @@
 // File: src/repository/UserRepository.ts
-// ✅ COMPLETE AND FINAL CORRECTED CODE
+// ✅ COMPLETE AND FINAL UPDATED CODE
 
 import pool from '../db'
 import { User } from '../types/User'
@@ -24,11 +24,15 @@ const mapRowToUser = (row: any): User | null => {
     is_profile_complete: !!camelizedDbRow.isProfileComplete,
     createdAt: camelizedDbRow.createdAt ? new Date(camelizedDbRow.createdAt) : new Date(),
     updatedAt: camelizedDbRow.updatedAt ? new Date(camelizedDbRow.updatedAt) : new Date(),
-    fcm_token: camelizedDbRow.fcmToken, // Add this if you have it in your User type
+    fcm_token: camelizedDbRow.fcmToken,
+    referralSource: camelizedDbRow.referralSource, // ✅ NAYA MAPPING
   }
 }
 
 class UserRepository {
+  // ... (baaki sabhi functions jaise registerPushToken, getPlayerId, createUser, etc. same rahenge)
+  // updateUser function dynamic hai, isliye usme koi badlav ki zaroorat nahi hai.
+
   async registerPushToken(userId: string, fcmToken: string): Promise<boolean> {
     const client = await pool.connect()
     try {
@@ -54,7 +58,7 @@ class UserRepository {
   }
 
   async createUser(
-    userData: Omit<User, 'createdAt' | 'updatedAt' | 'auth0Id'> & {
+    userData: Omit<User, 'createdAt' | 'updatedAt' | 'auth0Id' | 'referralSource'> & {
       auth0Id?: string
       tokens: number
     },
@@ -167,9 +171,6 @@ class UserRepository {
       if (!isExternalTransaction) (db as PoolClient).release()
     }
   }
-
-  // ✅ --- THIS IS THE FIX ---
-  // The missing functions have been added back to the class.
 
   async deleteUser(userId: string): Promise<boolean> {
     const query = `DELETE FROM users WHERE user_id = $1;`

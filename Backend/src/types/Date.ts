@@ -1,5 +1,5 @@
 // File: src/types/Date.ts (Backend)
-// ✅ COMPLETE AND FINAL CORRECTED CODE
+// ✅ COMPLETE AND FINAL UPDATED CODE
 
 export type DateOutcome = 'amazing' | 'no_show_cancelled' | 'other'
 export type DateStatus = 'pending' | 'approved' | 'declined' | 'cancelled' | 'completed'
@@ -15,7 +15,7 @@ export interface DateObject {
   locationMetadata?: { name?: string; address?: string; place_id?: string } | null
   status: DateStatus
   createdAt: Date
-  updatedAt: Date // Yeh field time lock ke liye use hogi
+  updatedAt: Date
 }
 
 export interface CreateDateInternal {
@@ -33,8 +33,9 @@ export interface UpcomingDate {
   dateId: number
   date: string
   time: string | null
-  updatedAt: string // ✅ YEH FIELD ADD KI GAYI HAI
+  updatedAt: string
   locationMetadata: { name: string }
+  status: DateStatus // ✅ YEH FIELD ADD KI GAYI HAI
   otherUser: {
     userId: string
     firstName: string

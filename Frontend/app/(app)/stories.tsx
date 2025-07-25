@@ -1,5 +1,5 @@
 // --- COMPLETE FINAL UPDATED CODE: app/(app)/stories/index.tsx ---
-// This version integrates the BubblePopup component.
+// This version integrates the BubblePopup component and filters out the current user's own stories.
 
 import React, { useState, useEffect, useRef, useCallback, useMemo } from 'react';
 import {
@@ -410,7 +410,6 @@ export default function StoriesScreen() {
   const router = useRouter();
   const { auth0User: authUser, isLoading: authContextLoading } = useAuth();
 
-  // ✅✅✅ FIX: `initialUserId` ko yahan receive karein ✅✅✅
   const params = useLocalSearchParams<{ date?: string; initialUserId?: string }>();
   const { date, initialUserId } = params;
   const storyDate = date;
@@ -458,7 +457,7 @@ export default function StoriesScreen() {
     setError(`Failed to ${context}. Please try again.`);
   }, []);
 
-  // ✅✅✅ FIX: Yeh useEffect ab initialUserId ko handle karega ✅✅✅
+  // ✅✅✅ UPDATE: Ab yeh useEffect user ki apni story ko filter kar dega ✅✅✅
   useEffect(() => {
     if (!date) {
       handleApiError('Date parameter is missing.', 'initialization');
@@ -478,7 +477,15 @@ export default function StoriesScreen() {
     getStoriesByDate(date)
       .then((response) => {
         const fetchedStories = (response.data || []) as StoryQueryResult[];
-        const storiesWithKeys: StoryWithKey[] = fetchedStories.map((story, index) => ({
+
+        // --- LOGGED-IN USER KI STORY HATAANE KA LOGIC ---
+        // Yahan hum `authUser.sub` (user ID) ka istemal karke stories filter kar rahe hain.
+        const storiesFromOtherUsers = fetchedStories.filter(
+          (story) => story.userId !== authUser.sub
+        );
+        // -----------------------------------------------
+
+        const storiesWithKeys: StoryWithKey[] = storiesFromOtherUsers.map((story, index) => ({
           ...story,
           userName: story.userName || 'User',
           uniqueStoryId: story.calendarId?.toString() ?? `generated-${date}-${index}`,
@@ -491,12 +498,11 @@ export default function StoriesScreen() {
             setStories(storiesWithKeys);
             setTimeout(() => {
               flatListRef.current?.scrollToIndex({ index: initialIndex, animated: false });
-              // onViewableItemsChanged se state update ho jayegi, lekin manually bhi kar sakte hain for safety
               setCurrentIndex(initialIndex);
             }, 100);
           } else {
             console.warn(
-              `[Stories] initialUserId ${initialUserId} not found in stories for date ${date}.`
+              `[Stories] initialUserId ${initialUserId} not found in stories for date ${date} (or it was the current user's story).`
             );
             setStories(storiesWithKeys);
           }

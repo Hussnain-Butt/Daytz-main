@@ -1,14 +1,14 @@
-// File: app/components/calendar.tsx
-// ✅ COMPLETE AND FINAL UPDATED FILE (DISABLE PAST MONTHS, ENABLE ONLY CURRENT AND NEXT 6 MONTHS)
+// ✅ COMPLETE AND FINAL UPDATED FILE
 
 import React, { useState, useEffect } from 'react';
 import { View, StyleSheet, Text, TouchableOpacity, Alert } from 'react-native';
 import { Calendar, DateData } from 'react-native-calendars';
 import { useRouter } from 'expo-router';
-import { format, startOfMonth, parse, isBefore, startOfToday, addMonths } from 'date-fns';
+import { format, startOfMonth, parse, isBefore, startOfToday, addMonths, parseISO } from 'date-fns';
 import { CalendarDay } from '../types/CalendarDay';
 import { User as Auth0User } from 'react-native-auth0';
 import { colors } from '../utils/theme';
+import { UpcomingDate } from '../types/Date'; // Make sure to import UpcomingDate
 
 // Interface for custom marking
 interface CustomMarking {
@@ -26,32 +26,45 @@ interface MarkedDates {
   [date: string]: CustomMarking;
 }
 
+// ✅ PROPS UPDATED
 interface VideoCalendarProps {
   user: (Auth0User & { sub?: string }) | null;
   calendarData: CalendarDay[];
+  plannedDates: UpcomingDate[]; // New prop for pending/approved dates
 }
 
-const VideoCalendar: React.FC<VideoCalendarProps> = ({ user, calendarData }) => {
+const VideoCalendar: React.FC<VideoCalendarProps> = ({ user, calendarData, plannedDates }) => {
   const router = useRouter();
   const [markedDates, setMarkedDates] = useState<MarkedDates>({});
   const [currentMonth, setCurrentMonth] = useState(format(new Date(), 'yyyy-MM-dd'));
 
+  // ✅ USEEFFECT LOGIC UPDATED FOR NEW COLORS
   useEffect(() => {
     const today = startOfToday();
     const newMarkedDates: MarkedDates = {};
 
-    // 1. Mark dates with uploaded videos
+    // 1. Mark dates with uploaded videos (Yellow) - This is the default
     calendarData.forEach((entry) => {
       if (entry.date && entry.userVideoUrl) {
         const dateStr = format(new Date(entry.date), 'yyyy-MM-dd');
         newMarkedDates[dateStr] = {
           marked: true,
-          dotColor: colors.GoldPrimary || 'blue',
+          dotColor: colors.GoldPrimary, // Yellow for posted invite
         };
       }
     });
 
-    // 2. Disable days before today with strikethrough
+    // 2. Mark pending/confirmed plans (Orange/Teal) - This will override the yellow dot
+    plannedDates.forEach((pDate) => {
+      const dateStr = format(parseISO(pDate.date), 'yyyy-MM-dd');
+      if (pDate.status === 'pending') {
+        newMarkedDates[dateStr] = { marked: true, dotColor: '#FFA500' }; // Orange for Pending
+      } else if (pDate.status === 'approved') {
+        newMarkedDates[dateStr] = { marked: true, dotColor: '#40E0D0' }; // Teal for Confirmed
+      }
+    });
+
+    // 3. Disable days before today with strikethrough (if not already marked)
     const monthStartDate = startOfMonth(parse(currentMonth, 'yyyy-MM-dd', new Date()));
     const daysInMonth = 31;
     for (let i = 0; i < daysInMonth; i++) {
@@ -73,7 +86,7 @@ const VideoCalendar: React.FC<VideoCalendarProps> = ({ user, calendarData }) => 
     }
 
     setMarkedDates(newMarkedDates);
-  }, [calendarData, currentMonth]);
+  }, [calendarData, plannedDates, currentMonth]);
 
   const handleDayPress = (day: DateData) => {
     if (markedDates[day.dateString]?.disabled) return;
@@ -85,16 +98,19 @@ const VideoCalendar: React.FC<VideoCalendarProps> = ({ user, calendarData }) => 
 
     const dateInfo = markedDates[day.dateString];
     if (dateInfo?.marked) {
+      // If a day is marked, it means there's either a video or a plan.
+      // Send user to stories page to see who is available.
       router.push({ pathname: '/(app)/stories', params: { date: day.dateString } });
     } else {
+      // If not marked, it's an empty, available day. Allow user to upload.
       router.push({ pathname: '/(app)/upload-day-video', params: { date: day.dateString } });
     }
   };
 
-  // Calculate min and max dates
   const today = startOfToday();
+  const firstDayOfCurrentMonth = startOfMonth(today);
   const maxDateObj = addMonths(today, 6);
-  const minDateStr = format(today, 'yyyy-MM-dd');
+  const minDateStr = format(firstDayOfCurrentMonth, 'yyyy-MM-dd');
   const maxDateStr = format(maxDateObj, 'yyyy-MM-dd');
 
   return (
@@ -115,7 +131,7 @@ const VideoCalendar: React.FC<VideoCalendarProps> = ({ user, calendarData }) => 
           selectedDayTextColor: colors.Black || '#000000',
           todayTextColor: colors.White || '#FFFFFF',
           dayTextColor: colors.White || '#E0E0E0',
-          dotColor: colors.GoldPrimary || 'blue',
+          dotColor: colors.GoldPrimary,
           selectedDotColor: colors.White || '#ffffff',
           arrowColor: colors.GoldPrimary || '#FFDB5C',
           disabledArrowColor: colors.GreyDark || '#555555',
@@ -148,10 +164,19 @@ const VideoCalendar: React.FC<VideoCalendarProps> = ({ user, calendarData }) => 
         hideExtraDays={true}
         firstDay={1}
       />
+      {/* ✅ LEGEND UPDATED WITH NEW COLORS */}
       <View style={styles.legendContainer}>
         <View style={styles.legendItem}>
-          <View style={[styles.legendDot, { backgroundColor: colors.GoldPrimary || 'blue' }]} />
-          <Text style={styles.legendText}>Video Uploaded</Text>
+          <View style={[styles.legendDot1, { backgroundColor: colors.GoldPrimary }]} />
+          <Text style={styles.legendText}>Posted Invite</Text>
+        </View>
+        <View style={styles.legendItem}>
+          <View style={[styles.legendDot1, { backgroundColor: '#FFA500' }]} />
+          <Text style={styles.legendText}>Pending</Text>
+        </View>
+        <View style={styles.legendItem}>
+          <View style={[styles.legendDot1, { backgroundColor: '#40E0D0' }]} />
+          <Text style={styles.legendText}>Confirmed</Text>
         </View>
       </View>
     </View>
@@ -171,6 +196,7 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     justifyContent: 'center',
     alignItems: 'center',
+    flexWrap: 'wrap',
     marginTop: 20,
     paddingBottom: 10,
   },
@@ -178,11 +204,18 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
     marginHorizontal: 10,
+    marginVertical: 5,
   },
   legendDot: {
     width: 10,
     height: 10,
     borderRadius: 5,
+    marginRight: 8,
+  },
+  legendDot1: {
+    width: 15,
+    height: 15,
+    borderRadius: 0,
     marginRight: 8,
   },
   legendText: {

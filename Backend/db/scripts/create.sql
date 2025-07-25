@@ -70,7 +70,8 @@ CREATE TABLE users (
     auth0_id VARCHAR(255) NULL,
     email VARCHAR(255) UNIQUE NOT NULL,
     tokens INTEGER DEFAULT 100,
-    fcm_token VARCHAR(255) NULL
+    fcm_token VARCHAR(255) NULL,
+    referral_source VARCHAR(255) DEFAULT NULL
 );
 
 CREATE TABLE advertisements (

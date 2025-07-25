@@ -2,7 +2,7 @@
 
 import { Stack } from 'expo-router';
 import React from 'react';
-import { View, ActivityIndicator, StyleSheet } from 'react-native';
+import { View, ActivityIndicator, StyleSheet, TouchableOpacity } from 'react-native';
 import { useAuth } from '../../contexts/AuthContext';
 
 export default function AppProtectedLayout() {

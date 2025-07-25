@@ -3,9 +3,10 @@
 
 import { User, CreateUserInternalData, UpdateUserPayload } from '../../types/User'
 import UserRepository from '../../repository/UserRepository'
-import { PoolClient } from 'pg' // For transactions
+import { PoolClient } from 'pg'
 
 const MONTHLY_REPLENISH_AMOUNT = 100
+const REFERRAL_BONUS_COINS = 10 // Bonus coins ki value
 
 class UserService {
   private userRepository: UserRepository
@@ -15,13 +16,42 @@ class UserService {
     console.log('[UserService] UserRepository instance created.')
   }
 
-  // ✅ THIS IS THE MAIN UPDATED FUNCTION IN THIS FILE
-  // It now accepts an optional 'client' to run inside a larger transaction.
+  // ✅ BADLAV: updateUser function mein bonus logic add kiya gaya hai
+  async updateUser(userId: string, updateData: UpdateUserPayload): Promise<User | null> {
+    console.log(`[UserService.updateUser] Updating user ${userId} with:`, updateData)
+
+    // Agar update data khali hai, to kuch na karein
+    if (Object.keys(updateData).length === 0) {
+      return this.getUserById(userId)
+    }
+
+    // Bonus coins ka logic
+    if (updateData.referralSource) {
+      const currentUser = await this.userRepository.getUserById(userId)
+
+      // Bonus sirf tab dein jab user maujood ho, usne pehle referral source nahi diya ho,
+      // aur naya referral source khali na ho.
+      if (currentUser && !currentUser.referralSource && updateData.referralSource.trim() !== '') {
+        console.log(
+          `[UserService.updateUser] User ${userId} provided a referral source for the first time. Awarding bonus.`,
+        )
+        // Current tokens mein bonus add karein
+        const newTotalTokens = (currentUser.tokens || 0) + REFERRAL_BONUS_COINS
+        updateData.tokens = newTotalTokens // updateData object ko modify karein
+        console.log(`[UserService.updateUser] New token balance for ${userId}: ${newTotalTokens}`)
+      }
+    }
+
+    return this.userRepository.updateUser(userId, updateData)
+  }
+
+  // ... (Baaki sabhi functions jaise spendTokensForUser, createUser etc. same rahenge)
+
   async spendTokensForUser(
     userId: string,
     amount: number,
     reason: string,
-    client: PoolClient | null = null, // Accept an optional transaction client
+    client: PoolClient | null = null,
   ): Promise<User | null> {
     console.log(
       `[UserService.spendTokensForUser] User ${userId} attempting to spend ${amount} tokens for: ${reason}.`,
@@ -33,15 +63,12 @@ class UserService {
       throw new Error('Amount to spend must be positive.')
     }
     try {
-      // Pass the client to the repository method
       const updatedUser = await this.userRepository.spendUserTokens(userId, amount, client)
-
       if (updatedUser) {
         console.log(
           `[UserService.spendTokensForUser] User ${userId} spent ${amount} tokens. New balance: ${updatedUser.tokens}. Reason: ${reason}`,
         )
       } else {
-        // This case should ideally not be reached if the repo throws on not found
         console.warn(`[UserService.spendTokensForUser] User ${userId} not found or spend failed.`)
       }
       return updatedUser
@@ -49,11 +76,9 @@ class UserService {
       console.error(
         `[UserService.spendTokensForUser] Error for user ${userId} spending ${amount} for ${reason}: ${error.message}`,
       )
-      throw error // Re-throw to be handled by the calling service (e.g., DatesService)
+      throw error
     }
   }
-
-  // --- No changes to the functions below, but included for completeness ---
 
   async createUser(userData: CreateUserInternalData): Promise<User | null> {
     console.log('[UserService.createUser] Attempting with data:', userData)
@@ -61,6 +86,7 @@ class UserService {
       if (!userData.email) {
         throw new Error('Email is required to create a user.')
       }
+      // New user gets 100 coins by default. Bonus is added later on first profile save.
       const payloadForRepo = {
         userId: userData.userId,
         email: userData.email,
@@ -90,14 +116,6 @@ class UserService {
 
   async getUserById(userId: string): Promise<User | null> {
     return this.userRepository.getUserById(userId)
-  }
-
-  async updateUser(userId: string, updateData: Partial<User>): Promise<User | null> {
-    console.log(`[UserService.updateUser] Updating user ${userId} with:`, updateData)
-    if (Object.keys(updateData).length === 0) {
-      return this.getUserById(userId)
-    }
-    return this.userRepository.updateUser(userId, updateData)
   }
 
   async deleteUser(userId: string): Promise<boolean> {
