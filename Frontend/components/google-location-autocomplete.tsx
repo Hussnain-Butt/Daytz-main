@@ -1,4 +1,4 @@
-// File: components/google-location-autocomplete.tsx
+// File: components/google-location-autocomplete.tsx (UPDATED WITH DEBUGGING)
 import React, { useState, useEffect, useRef } from 'react';
 import {
   View,
@@ -15,7 +15,7 @@ import axios from 'axios';
 import 'react-native-get-random-values'; // Required for uuid
 import { v4 as uuidv4 } from 'uuid'; // For generating session tokens
 
-// Interface for Autocomplete Predictions
+// Interfaces remain the same...
 export interface PlacePrediction {
   place_id: string;
   description: string;
@@ -25,33 +25,21 @@ export interface PlacePrediction {
   };
 }
 
-// Interface for Place Details (what ProposeDateScreen expects)
 export interface PlaceDetails {
   place_id: string;
   name: string;
   formatted_address: string;
-  // You can add more fields like geometry if needed
 }
 
 interface GooglePlacesInputProps {
   apiKey: string;
   placeholder?: string;
   onPlaceSelected: (details: PlaceDetails | null) => void;
+  // ... other props
   textInputProps?: any;
-  styles?: {
-    container?: object;
-    textInputContainer?: object;
-    textInput?: object;
-    listView?: object;
-    row?: object;
-    description?: object;
-    separator?: object;
-  };
+  styles?: any;
   fetchDetails?: boolean;
-  query?: {
-    language?: string;
-    components?: string;
-  };
+  query?: any;
   debounce?: number;
 }
 
@@ -69,13 +57,13 @@ const GooglePlacesInput: React.FC<GooglePlacesInputProps> = ({
   const [predictions, setPredictions] = useState<PlacePrediction[]>([]);
   const [isLoading, setIsLoading] = useState(false);
   const [showPredictions, setShowPredictions] = useState(false);
-
-  // ✨ NEW: State for the session token for billing optimization
   const [sessionToken, setSessionToken] = useState<string | undefined>(undefined);
-
   const debounceTimeout = useRef<NodeJS.Timeout | null>(null);
 
   const fetchAutocompletePredictions = async (text: string) => {
+    // ✅ DEBUG: Log when the function is called
+    console.log(`[DEBUG] Fetching predictions for: "${text}"`);
+
     if (text.length < 3) {
       setPredictions([]);
       setShowPredictions(false);
@@ -92,19 +80,36 @@ const GooglePlacesInput: React.FC<GooglePlacesInputProps> = ({
             key: apiKey,
             language: queryParams.language || 'en',
             components: queryParams.components,
-            // ✨ NEW: Use the session token for grouped billing
             sessiontoken: sessionToken,
           },
         }
       );
-      if (response.data.predictions) {
+
+      // ✅✅✅ CRITICAL DEBUG: Log the entire API response from Google
+      console.log(
+        '[DEBUG] Google Places API Raw Response:',
+        JSON.stringify(response.data, null, 2)
+      );
+
+      // ✅ FIX: Improved logic to check response status from Google
+      if (response.data.status === 'OK') {
         setPredictions(response.data.predictions);
         setShowPredictions(true);
+      } else if (response.data.status === 'ZERO_RESULTS') {
+        setPredictions([]); // No results found, clear the list
+        setShowPredictions(false);
       } else {
+        // Handle other statuses like REQUEST_DENIED, INVALID_REQUEST
+        console.error(
+          'Google Places API Error:',
+          response.data.status,
+          response.data.error_message || ''
+        );
         setPredictions([]);
+        setShowPredictions(false);
       }
     } catch (error) {
-      console.error('Failed to fetch places autocomplete:', error);
+      console.error('Failed to fetch places autocomplete (Axios Error):', error);
       setPredictions([]);
     } finally {
       setIsLoading(false);
@@ -122,6 +127,7 @@ const GooglePlacesInput: React.FC<GooglePlacesInputProps> = ({
   };
 
   const handleSelectPlace = async (prediction: PlacePrediction) => {
+    // This function remains largely the same
     Keyboard.dismiss();
     setQuery(prediction.description);
     setShowPredictions(false);
@@ -136,7 +142,6 @@ const GooglePlacesInput: React.FC<GooglePlacesInputProps> = ({
               place_id: prediction.place_id,
               key: apiKey,
               fields: 'name,formatted_address,place_id',
-              // ✨ NEW: Use the same session token for the details call
               sessiontoken: sessionToken,
             },
           }
@@ -151,22 +156,18 @@ const GooglePlacesInput: React.FC<GooglePlacesInputProps> = ({
         onPlaceSelected(null);
       } finally {
         setIsLoading(false);
-        // ✨ NEW: End the session by clearing the token
         setSessionToken(undefined);
       }
     } else {
-      // Fallback if details are not fetched
       onPlaceSelected({
         name: prediction.structured_formatting?.main_text || prediction.description,
         formatted_address: prediction.description,
         place_id: prediction.place_id,
       });
-      // ✨ NEW: End the session by clearing the token
       setSessionToken(undefined);
     }
   };
 
-  // ✨ NEW: Generate a new session token when the input is focused
   const handleFocus = () => {
     if (!sessionToken) {
       setSessionToken(uuidv4());
@@ -183,7 +184,6 @@ const GooglePlacesInput: React.FC<GooglePlacesInputProps> = ({
           onChangeText={handleQueryChange}
           value={query}
           onFocus={handleFocus}
-          // Hide predictions with a small delay on blur to allow presses to register
           onBlur={() => setTimeout(() => setShowPredictions(false), 200)}
           placeholderTextColor="#8E8E93"
           {...textInputProps}
@@ -213,12 +213,12 @@ const GooglePlacesInput: React.FC<GooglePlacesInputProps> = ({
   );
 };
 
-// Styles updated for dark theme and absolute positioning
+// Styles remain the same...
 const styles = StyleSheet.create({
   container: {
-    position: 'relative', // Parent must have a position for absolute children to work from
+    position: 'relative',
     width: '100%',
-    zIndex: 1000, // High zIndex for the container to establish stacking context
+    zIndex: 1000,
   },
   textInputContainer: {
     flexDirection: 'row',
@@ -236,10 +236,9 @@ const styles = StyleSheet.create({
   loader: {
     paddingHorizontal: 10,
   },
-  // The listView MUST be positioned absolutely to float over screen content
   listView: {
     position: 'absolute',
-    top: 60, // Position it below the input (52 height + 8 margin)
+    top: 60,
     left: 0,
     right: 0,
     backgroundColor: '#2C2C2E',
@@ -247,7 +246,7 @@ const styles = StyleSheet.create({
     borderWidth: 1,
     borderRadius: 8,
     maxHeight: 250,
-    zIndex: 1001, // Must be higher than container
+    zIndex: 1001,
     ...(Platform.OS === 'android' ? { elevation: 5 } : {}),
   },
   row: {
