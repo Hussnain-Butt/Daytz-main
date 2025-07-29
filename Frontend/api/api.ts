@@ -20,7 +20,7 @@ import {
 } from '../types/Attraction';
 
 const getApiBaseUrl = (): string => {
-  const envApiUrl = 'https://backend-production-7442.up.railway.app/api';
+  const envApiUrl = 'http://192.168.1.10:3000/api';
   if (envApiUrl) return envApiUrl;
   if (Platform.OS === 'android') return 'http://10.0.2.2:3000/api';
   return 'http://localhost:3000/api';

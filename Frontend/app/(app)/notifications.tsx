@@ -56,7 +56,6 @@ const BubblePopup = ({ visible, type, title, message, buttonText, onClose }) => 
 // --- END OF BUBBLE POPUP COMPONENT ---
 
 const getNotificationIcon = (notificationType: string) => {
-  // ✅ Match proposal ko bhi happy icon dikhayein
   if (notificationType === 'MATCH_PROPOSAL' || notificationType.startsWith('DATE_APPROVED')) {
     return calcHappyIcon;
   }
@@ -134,44 +133,45 @@ export default function NotificationsScreen() {
     setIsRefreshing(false);
   }, [fetchNotifications]);
 
-  // ✅ Navigation logic ko naye `MATCH_PROPOSAL` flow ke liye update kiya gaya hai
   const handleNotificationPress = (item: Notification) => {
     console.log('Notification pressed:', item);
 
     switch (item.type) {
       case 'ATTRACTION_PROPOSAL':
         if (item.related_entity_id && item.proposing_user_id) {
+          // ✅ FIX: Explicitly convert parameters to string.
           router.push({
             pathname: '/(app)/stories',
             params: {
-              date: item.related_entity_id, // Story ki date
-              initialUserId: item.proposing_user_id, // Kiski story dikhani hai
+              date: String(item.related_entity_id),
+              initialUserId: String(item.proposing_user_id),
             },
           });
         }
         break;
 
-      // ✅ YEH HAI NAYI LOGIC: Match hone par propose-date screen par jao
       case 'MATCH_PROPOSAL':
         if (item.related_entity_id && item.proposing_user_id) {
+          // ✅ FIX: Explicitly convert parameters to string to prevent type errors.
+          // This ensures the receiving screen gets the expected data type.
           router.push({
             pathname: '/(app)/propose-date',
             params: {
-              userToId: item.proposing_user_id, // Jiske liye propose karna hai
-              dateForProposal: item.related_entity_id, // Story ki date
+              userToId: String(item.proposing_user_id),
+              dateForProposal: String(item.related_entity_id),
             },
           });
         }
         break;
 
-      // Baaki sabhi date-related notifications abhi bhi date details screen par jayenge
       case 'DATE_PROPOSAL':
       case 'DATE_APPROVED':
       case 'DATE_DECLINED':
       case 'DATE_RESCHEDULED':
       case 'DATE_CANCELLED':
         if (item.related_entity_id) {
-          router.push(`/(app)/dates/${item.related_entity_id}`);
+          // ✅ FIX: Also ensure this is a string for consistency and safety.
+          router.push(`/(app)/dates/${String(item.related_entity_id)}`);
         }
         break;
 

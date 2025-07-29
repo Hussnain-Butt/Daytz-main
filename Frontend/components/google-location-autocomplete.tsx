@@ -9,83 +9,74 @@ import {
   StyleSheet,
   ActivityIndicator,
   Platform,
+  Keyboard,
 } from 'react-native';
 import axios from 'axios';
+import 'react-native-get-random-values'; // Required for uuid
+import { v4 as uuidv4 } from 'uuid'; // For generating session tokens
 
 // Interface for Autocomplete Predictions
-interface PlacePrediction {
+export interface PlacePrediction {
   place_id: string;
   description: string;
   structured_formatting?: {
     main_text?: string;
     secondary_text?: string;
   };
-  // Add other fields from prediction if needed
 }
 
 // Interface for Place Details (what ProposeDateScreen expects)
-interface PlaceDetails {
-  place_id?: string;
-  name?: string;
-  formatted_address?: string;
-  vicinity?: string; // vicinity is often available
-  // Add other geometry, address_components etc. if needed from Place Details API
+export interface PlaceDetails {
+  place_id: string;
+  name: string;
+  formatted_address: string;
+  // You can add more fields like geometry if needed
 }
 
 interface GooglePlacesInputProps {
+  apiKey: string;
   placeholder?: string;
-  onPlaceSelected: (details: PlaceDetails | null, predictionData: PlacePrediction | null) => void; // Callback with details
-  textInputProps?: any; // To pass down other TextInput props like style
+  onPlaceSelected: (details: PlaceDetails | null) => void;
+  textInputProps?: any;
   styles?: {
-    // Allow custom styling from parent
     container?: object;
-    textInputContainer?: object; // If you wrap TextInput
+    textInputContainer?: object;
     textInput?: object;
     listView?: object;
     row?: object;
     description?: object;
     separator?: object;
   };
-  fetchDetails?: boolean; // To control if details API is called
+  fetchDetails?: boolean;
   query?: {
-    // For additional query params like language, components, etc.
     language?: string;
-    components?: string; // e.g., 'country:us'
-    // Add other Google Places Autocomplete query params if needed
+    components?: string;
   };
   debounce?: number;
-  apiKey: string; // API key should be passed as a prop
 }
 
 const GooglePlacesInput: React.FC<GooglePlacesInputProps> = ({
+  apiKey,
   placeholder = 'Search for a place',
   onPlaceSelected,
   textInputProps = {},
   styles: customStyles = {},
-  fetchDetails = true, // Default to true as ProposeDateScreen expects details
+  fetchDetails = true,
   query: queryParams = {},
-  debounce = 300,
-  apiKey, // Expect API key as a prop
+  debounce = 400,
 }) => {
   const [query, setQuery] = useState('');
   const [predictions, setPredictions] = useState<PlacePrediction[]>([]);
   const [isLoading, setIsLoading] = useState(false);
   const [showPredictions, setShowPredictions] = useState(false);
-  const debounceTimeout = useRef<NodeJS.Timeout | null>(null);
 
-  useEffect(() => {
-    // Clear predictions if query is empty
-    if (!query.trim()) {
-      setPredictions([]);
-      setShowPredictions(false);
-      // Potentially call onPlaceSelected with null if input is cleared
-      // onPlaceSelected(null, null);
-    }
-  }, [query]);
+  // ✨ NEW: State for the session token for billing optimization
+  const [sessionToken, setSessionToken] = useState<string | undefined>(undefined);
+
+  const debounceTimeout = useRef<NodeJS.Timeout | null>(null);
 
   const fetchAutocompletePredictions = async (text: string) => {
     if (text.length < 3) {
-      // Only search if query is reasonably long
       setPredictions([]);
       setShowPredictions(false);
       return;
@@ -100,9 +91,9 @@ const GooglePlacesInput: React.FC<GooglePlacesInputProps> = ({
             input: text,
             key: apiKey,
             language: queryParams.language || 'en',
-            components: queryParams.components, // e.g., 'country:us'
-            // sessiontoken: 'YOUR_SESSION_TOKEN', // Important for billing, generate per session
-            ...queryParams, // Spread other query params
+            components: queryParams.components,
+            // ✨ NEW: Use the session token for grouped billing
+            sessiontoken: sessionToken,
           },
         }
       );
@@ -111,12 +102,10 @@ const GooglePlacesInput: React.FC<GooglePlacesInputProps> = ({
         setShowPredictions(true);
       } else {
         setPredictions([]);
-        setShowPredictions(false);
       }
     } catch (error) {
       console.error('Failed to fetch places autocomplete:', error);
       setPredictions([]);
-      setShowPredictions(false);
     } finally {
       setIsLoading(false);
     }
@@ -127,25 +116,18 @@ const GooglePlacesInput: React.FC<GooglePlacesInputProps> = ({
     if (debounceTimeout.current) {
       clearTimeout(debounceTimeout.current);
     }
-    if (text.length > 2) {
-      // Only debounce if text is meaningful
-      debounceTimeout.current = setTimeout(() => {
-        fetchAutocompletePredictions(text);
-      }, debounce);
-    } else {
-      setPredictions([]);
-      setShowPredictions(false);
-    }
+    debounceTimeout.current = setTimeout(() => {
+      fetchAutocompletePredictions(text);
+    }, debounce);
   };
 
   const handleSelectPlace = async (prediction: PlacePrediction) => {
-    setQuery(prediction.description); // Update text input with selected description
-    setPredictions([]);
-    setShowPredictions(false);
     Keyboard.dismiss();
+    setQuery(prediction.description);
+    setShowPredictions(false);
 
     if (fetchDetails && prediction.place_id) {
-      setIsLoading(true); // Show loader while fetching details
+      setIsLoading(true);
       try {
         const detailsResponse = await axios.get(
           `https://maps.googleapis.com/maps/api/place/details/json`,
@@ -153,35 +135,43 @@ const GooglePlacesInput: React.FC<GooglePlacesInputProps> = ({
             params: {
               place_id: prediction.place_id,
               key: apiKey,
-              language: queryParams.language || 'en',
-              fields: 'name,formatted_address,place_id,vicinity,geometry', // Customize fields as needed
-              // sessiontoken: 'YOUR_SESSION_TOKEN', // Use the same session token
+              fields: 'name,formatted_address,place_id',
+              // ✨ NEW: Use the same session token for the details call
+              sessiontoken: sessionToken,
             },
           }
         );
         if (detailsResponse.data.result) {
-          const placeDetails: PlaceDetails = detailsResponse.data.result;
-          onPlaceSelected(placeDetails, prediction); // Pass full details
+          onPlaceSelected(detailsResponse.data.result as PlaceDetails);
         } else {
-          console.error('Failed to fetch place details:', detailsResponse.data.status);
-          onPlaceSelected(null, prediction); // Pass prediction data even if details fail
+          onPlaceSelected(null);
         }
       } catch (error) {
         console.error('Error fetching place details:', error);
-        onPlaceSelected(null, prediction); // Pass prediction data even on error
+        onPlaceSelected(null);
       } finally {
         setIsLoading(false);
+        // ✨ NEW: End the session by clearing the token
+        setSessionToken(undefined);
       }
     } else {
-      // If not fetching details, or no place_id, return the prediction itself
-      // Adapt this part based on what `onPlaceSelected` expects in this scenario
-      const minimalDetails: PlaceDetails = {
+      // Fallback if details are not fetched
+      onPlaceSelected({
         name: prediction.structured_formatting?.main_text || prediction.description,
         formatted_address: prediction.description,
         place_id: prediction.place_id,
-      };
-      onPlaceSelected(minimalDetails, prediction);
+      });
+      // ✨ NEW: End the session by clearing the token
+      setSessionToken(undefined);
     }
+  };
+
+  // ✨ NEW: Generate a new session token when the input is focused
+  const handleFocus = () => {
+    if (!sessionToken) {
+      setSessionToken(uuidv4());
+    }
+    setShowPredictions(true);
   };
 
   return (
@@ -189,16 +179,16 @@ const GooglePlacesInput: React.FC<GooglePlacesInputProps> = ({
       <View style={[styles.textInputContainer, customStyles.textInputContainer]}>
         <TextInput
           placeholder={placeholder}
-          style={[styles.textInput, customStyles.textInput, textInputProps.style]}
+          style={[styles.textInput, customStyles.textInput]}
           onChangeText={handleQueryChange}
           value={query}
-          onFocus={() => {
-            if (query.length > 2 && predictions.length > 0) setShowPredictions(true);
-          }}
-          // onBlur={() => setTimeout(() => setShowPredictions(false), 100)} // Hide on blur with delay
-          {...textInputProps} // Spread other TextInput props
+          onFocus={handleFocus}
+          // Hide predictions with a small delay on blur to allow presses to register
+          onBlur={() => setTimeout(() => setShowPredictions(false), 200)}
+          placeholderTextColor="#8E8E93"
+          {...textInputProps}
         />
-        {isLoading && <ActivityIndicator style={styles.loader} size="small" />}
+        {isLoading && <ActivityIndicator style={styles.loader} color="#FFF" />}
       </View>
       {showPredictions && predictions.length > 0 && (
         <FlatList
@@ -210,80 +200,73 @@ const GooglePlacesInput: React.FC<GooglePlacesInputProps> = ({
               style={[styles.row, customStyles.row]}
               onPress={() => handleSelectPlace(item)}>
               <Text style={[styles.description, customStyles.description]}>
-                {item.structured_formatting?.main_text || item.description}
+                {item.structured_formatting?.main_text}
               </Text>
-              {item.structured_formatting?.secondary_text && (
-                <Text
-                  style={[
-                    styles.secondaryText,
-                    customStyles.predefinedPlacesDescription /* If it exists in parent */,
-                  ]}>
-                  {item.structured_formatting.secondary_text}
-                </Text>
-              )}
+              <Text style={styles.secondaryText}>{item.structured_formatting?.secondary_text}</Text>
             </TouchableOpacity>
           )}
           ItemSeparatorComponent={() => <View style={[styles.separator, customStyles.separator]} />}
-          keyboardShouldPersistTaps="handled" // Important for TouchableOpacity in FlatList
+          keyboardShouldPersistTaps="handled"
         />
       )}
     </View>
   );
 };
 
+// Styles updated for dark theme and absolute positioning
 const styles = StyleSheet.create({
   container: {
-    // backgroundColor: '#f0f0f0', // Example default background
+    position: 'relative', // Parent must have a position for absolute children to work from
     width: '100%',
-    zIndex: 1, // Default zIndex
-    ...(Platform.OS === 'android' ? { elevation: 1 } : {}), // For Android shadow on listView
+    zIndex: 1000, // High zIndex for the container to establish stacking context
   },
   textInputContainer: {
-    // Wrapper for TextInput and loader
     flexDirection: 'row',
     alignItems: 'center',
-    // borderWidth: 1,
-    // borderColor: '#ccc',
-    // borderRadius: 5,
+    backgroundColor: '#2C2C2E',
+    borderRadius: 12,
   },
   textInput: {
     flex: 1,
-    height: 40,
-    // paddingHorizontal: 10,
-    // fontSize: 16,
-    // backgroundColor: 'white',
+    height: 52,
+    paddingHorizontal: 16,
+    fontSize: 16,
+    color: '#FFFFFF',
   },
   loader: {
-    paddingHorizontal: 5,
+    paddingHorizontal: 10,
   },
+  // The listView MUST be positioned absolutely to float over screen content
   listView: {
-    backgroundColor: 'white', // Default list background
-    borderColor: '#ccc',
-    borderWidth: StyleSheet.hairlineWidth,
-    // borderRadius: 5, // If you want rounded corners
-    // position: 'absolute', // Make sure it overlays correctly
-    // top: '100%', // Position below the input
-    // left: 0,
-    // right: 0,
-    maxHeight: 200, // Limit height
-    zIndex: 10, // Ensure it's above other content
-    ...(Platform.OS === 'android' ? { elevation: 10 } : {}),
+    position: 'absolute',
+    top: 60, // Position it below the input (52 height + 8 margin)
+    left: 0,
+    right: 0,
+    backgroundColor: '#2C2C2E',
+    borderColor: '#3A3A3C',
+    borderWidth: 1,
+    borderRadius: 8,
+    maxHeight: 250,
+    zIndex: 1001, // Must be higher than container
+    ...(Platform.OS === 'android' ? { elevation: 5 } : {}),
   },
   row: {
-    padding: 12,
-    backgroundColor: 'white',
+    paddingVertical: 12,
+    paddingHorizontal: 16,
   },
   description: {
-    fontSize: 15,
-    color: '#333',
+    fontSize: 16,
+    color: '#FFFFFF',
+    fontWeight: '500',
   },
   secondaryText: {
     fontSize: 13,
-    color: '#777',
+    color: '#EBEBF599',
+    marginTop: 2,
   },
   separator: {
-    height: StyleSheet.hairlineWidth,
-    backgroundColor: '#ccc',
+    height: 1,
+    backgroundColor: '#3A3A3C',
   },
 });
 
