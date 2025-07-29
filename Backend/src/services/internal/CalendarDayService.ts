@@ -1,5 +1,5 @@
 // File: src/services/internal/CalendarDayService.ts
-// ✅ COMPLETE AND CORRECTED CODE
+// ✅ COMPLETE AND FINAL UPDATED CODE
 
 import {
   CalendarDay,
@@ -22,9 +22,24 @@ class CalendarDayService {
     console.log('[CalendarDayService] Initialized.')
   }
 
-  // ✅ This function now correctly uses the repository data
-  async getStoriesForDateWithFreshUrls(date: string): Promise<StoryQueryResultWithUrl[] | null> {
-    const storiesFromRepo = await this.calendarDayRepository.findStoriesByDateWithUserDetails(date)
+  // ✅ BADLAV: Yeh function ab optional zipcodes ki list accept karega
+  async getStoriesForDateWithFreshUrls(
+    date: string,
+    zipcodeList?: string[], // <-- Naya optional parameter
+  ): Promise<StoryQueryResultWithUrl[] | null> {
+    let storiesFromRepo
+    // Agar zipcodeList di gayi hai, to naya location-based function use karein
+    if (zipcodeList && zipcodeList.length > 0) {
+      console.log(`[Service] Fetching stories for date ${date} in specific zipcodes.`)
+      storiesFromRepo = await this.calendarDayRepository.findStoriesByDateAndZipcodes(
+        date,
+        zipcodeList,
+      )
+    } else {
+      // Fallback: Agar koi zipcode nahi diya, to purana function use karein (sabke liye)
+      console.log(`[Service] Fetching all stories for date ${date} (no zipcode filter).`)
+      storiesFromRepo = await this.calendarDayRepository.findStoriesByDateWithUserDetails(date)
+    }
 
     if (storiesFromRepo === null) {
       console.error(`[Service] Repository returned null for date: ${date}. DB error.`)
@@ -45,19 +60,14 @@ class CalendarDayService {
             console.error(`[Service] Error fetching fresh URL for ${story.vimeoUri}:`, fetchErr)
           }
         }
-
-        // Return the final structure with all correct data
-        return {
-          ...story, // This includes correct userName and profilePictureUrl from the repo
-          playableUrl: playableUrl,
-        }
+        return { ...story, playableUrl: playableUrl }
       }),
     )
 
     return storiesWithUrls
   }
 
-  // --- Other service methods (no changes needed) ---
+  // --- Baaki sabhi service methods bilkul waise hi rahenge ---
 
   async createCalendarDay(calendarDay: CreateCalendarDay): Promise<CalendarDay | null> {
     return this.calendarDayRepository.createCalendarDay(calendarDay)

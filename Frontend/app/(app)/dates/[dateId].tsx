@@ -1,5 +1,4 @@
-// File: app/(app)/dates/[dateId].tsx
-// ✅ COMPLETE AND FINAL UPDATED CODE (UI LOGIC FOR RESCHEDULE FLOW)
+// ✅ COMPLETE AND FINAL UPDATED CODE (UI LOGIC WITH TIME PICKER)
 
 import React, { useState, useEffect, useCallback, useRef } from 'react';
 import {
@@ -14,7 +13,7 @@ import {
   Text,
   Modal,
   Alert,
-  TextInput,
+  TextInput, // Iski zaroorat ab bhi Venue ke liye hai
   KeyboardAvoidingView,
 } from 'react-native';
 import { Avatar } from 'react-native-paper';
@@ -31,6 +30,9 @@ import {
 import { DetailedDateObject } from '../../../types/Date';
 import { Video, ResizeMode } from 'expo-av';
 import { Ionicons } from '@expo/vector-icons';
+
+// ✅ CHANGE: DateTimePicker ko import karein
+import DateTimePicker from '@react-native-community/datetimepicker';
 
 // Assets
 const BACK_ARROW_ICON = require('../../../assets/back_arrow_icon.png');
@@ -59,7 +61,7 @@ const screenColors = {
   White: '#FFFFFF',
 };
 
-// Reusable Bubble Popup Component (unchanged)
+// BubblePopup Component (unchanged)
 const BubblePopup = ({ visible, type, title, message, buttonText, onClose }) => {
   if (!visible) return null;
   const isSuccess = type === 'success';
@@ -84,62 +86,86 @@ const BubblePopup = ({ visible, type, title, message, buttonText, onClose }) => 
   );
 };
 
-// Reschedule Modal Component (unchanged)
+// ✅✅✅ Reschedule Modal Component (MODIFIED FOR TIME PICKER) ✅✅✅
 const RescheduleModal = ({ visible, onClose, onSubmit, currentDateDetails }) => {
-  const [newDate, setNewDate] = useState(
-    currentDateDetails.date && isValid(parseISO(currentDateDetails.date))
-      ? format(parseISO(currentDateDetails.date), 'yyyy-MM-dd')
-      : ''
-  );
-  const [newTime, setNewTime] = useState(
-    currentDateDetails.time
-      ? format(parseISO(`1970-01-01T${currentDateDetails.time}`), 'HH:mm')
-      : ''
-  );
+  // ✅ CHANGE: String ke bajaye Date object ke liye state use karein
+  const [time, setTime] = useState(new Date());
   const [newVenue, setNewVenue] = useState(currentDateDetails.locationMetadata?.name || '');
+  // ✅ CHANGE: Time Picker ko show/hide karne ke liye state
+  const [showTimePicker, setShowTimePicker] = useState(false);
+
+  // Jab modal khule, to time state ko current date ke time se set karein
+  useEffect(() => {
+    if (visible && currentDateDetails.time) {
+      const [hours, minutes] = currentDateDetails.time.split(':');
+      const initialTime = new Date();
+      initialTime.setHours(parseInt(hours, 10), parseInt(minutes, 10));
+      setTime(initialTime);
+    } else if (visible) {
+      setTime(new Date()); // Default to current time
+    }
+  }, [visible, currentDateDetails.time]);
+
+  // ✅ CHANGE: Time picker se time select hone par yeh function call hoga
+  const onTimeChange = (event: any, selectedDate?: Date) => {
+    setShowTimePicker(false); // Picker ko hide karein
+    if (selectedDate) {
+      setTime(selectedDate); // Naya time state mein set karein
+    }
+  };
+
   const handleReschedule = () => {
-    if (!newDate.match(/^\d{4}-\d{2}-\d{2}$/)) {
-      Alert.alert('Invalid Format', 'Please enter the date in YYYY-MM-DD format.');
-      return;
-    }
-    if (!newTime.match(/^\d{2}:\d{2}$/)) {
-      Alert.alert('Invalid Format', 'Please enter the time in HH:mm format.');
-      return;
-    }
     if (!newVenue.trim()) {
       Alert.alert('Venue Required', 'Please enter a venue for the date.');
       return;
     }
+    // ✅ CHANGE: `onSubmit` ko ab formatted time string bheja jayega
     onSubmit({
-      date: newDate,
-      time: `${newTime}:00`,
+      date: currentDateDetails.date, // Fixed date
+      time: format(time, 'HH:mm:ss'), // Date object se format karein
       locationMetadata: { name: newVenue },
     });
   };
+
   return (
     <Modal transparent visible={visible} animationType="slide" onRequestClose={onClose}>
       <KeyboardAvoidingView
         behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
         style={styles.modalOverlay}>
         <View style={styles.modalContent}>
-          <Text style={styles.modalTitle}>Reschedule Date</Text>
+          <Text style={styles.modalTitle}>Reschedule Details</Text>
+
+          <View style={styles.fixedDateContainer}>
+            <Text style={styles.fixedDateLabel}>Date:</Text>
+            <Text style={styles.fixedDateValue}>
+              {currentDateDetails.date && isValid(parseISO(currentDateDetails.date))
+                ? format(parseISO(currentDateDetails.date), 'MMMM dd, yyyy')
+                : 'Not available'}
+            </Text>
+          </View>
+
+          {/* ✅ CHANGE: TextInput ko TouchableOpacity se replace kiya gaya */}
+          <TouchableOpacity style={styles.timePickerButton} onPress={() => setShowTimePicker(true)}>
+            <Text style={styles.timePickerButtonText}>
+              {time ? format(time, 'p') : 'Select Time'}
+            </Text>
+          </TouchableOpacity>
+
+          {/* ✅ CHANGE: Time Picker component ko yahan render kiya ja raha hai */}
+          {showTimePicker && (
+            <DateTimePicker
+              testID="dateTimePicker"
+              value={time}
+              mode="time"
+              is24Hour={false}
+              display="default"
+              onChange={onTimeChange}
+            />
+          )}
+
           <TextInput
             style={styles.modalInput}
-            placeholder="Date (YYYY-MM-DD)"
-            value={newDate}
-            onChangeText={setNewDate}
-            placeholderTextColor={screenColors.textSecondary}
-          />
-          <TextInput
-            style={styles.modalInput}
-            placeholder="Time (HH:mm)"
-            value={newTime}
-            onChangeText={setNewTime}
-            placeholderTextColor={screenColors.textSecondary}
-          />
-          <TextInput
-            style={styles.modalInput}
-            placeholder="Venue"
+            placeholder="New Venue"
             value={newVenue}
             onChangeText={setNewVenue}
             placeholderTextColor={screenColors.textSecondary}
@@ -258,7 +284,6 @@ const DateDetailScreen = () => {
     ]);
   };
 
-  // ✅✅✅ FIX: Reschedule popup message updated as requested ✅✅✅
   const handleRescheduleSubmit = async (newDetails: {
     date: string;
     time: string;
@@ -286,14 +311,11 @@ const DateDetailScreen = () => {
     }
   };
 
-  // ✅✅✅ FIX: Footer logic completely rebuilt for the new reschedule flow ✅✅✅
   const renderFooter = () => {
     if (!dateDetails || !auth0User) return null;
-
     const currentUserIsUserFrom = auth0User.sub === dateDetails.userFrom.userId;
     const currentUserIsUserTo = auth0User.sub === dateDetails.userTo.userId;
 
-    // --- State 1: Date is APPROVED ---
     if (dateDetails.status === 'approved') {
       return (
         <View style={styles.actionContainer}>
@@ -312,15 +334,11 @@ const DateDetailScreen = () => {
         </View>
       );
     }
-
-    // --- State 2: Date is PENDING ---
     if (dateDetails.status === 'pending') {
       const myTurnToRespond =
         (currentUserIsUserFrom && !dateDetails.userFromApproved) ||
         (currentUserIsUserTo && !dateDetails.userToApproved);
-
       if (myTurnToRespond) {
-        // My turn to act: I can Accept, propose a new time (Reschedule), or Cancel.
         return (
           <View style={styles.actionContainerThreeButtons}>
             <TouchableOpacity
@@ -348,7 +366,6 @@ const DateDetailScreen = () => {
           </View>
         );
       } else {
-        // Not my turn, I'm waiting for the other user.
         const otherUser = currentUserIsUserFrom ? dateDetails.userTo : dateDetails.userFrom;
         return (
           <View style={styles.infoBox}>
@@ -357,8 +374,6 @@ const DateDetailScreen = () => {
         );
       }
     }
-
-    // --- State 3: For all other statuses (declined, cancelled, completed) ---
     return (
       <View style={styles.infoBox}>
         <Text style={styles.infoBoxText}>
@@ -375,7 +390,6 @@ const DateDetailScreen = () => {
       </View>
     );
   }
-
   if (!dateDetails || !auth0User) {
     return (
       <SafeAreaView style={styles.container}>
@@ -483,7 +497,6 @@ const DateDetailScreen = () => {
   );
 };
 
-// Styles (one new style added for 3-button layout)
 const styles = StyleSheet.create({
   container: { flex: 1, backgroundColor: screenColors.background },
   loadingContainer: {
@@ -566,7 +579,7 @@ const styles = StyleSheet.create({
     paddingBottom: Platform.OS === 'ios' ? 34 : 20,
   },
   actionContainer: { flexDirection: 'row', justifyContent: 'space-between' },
-  actionContainerThreeButtons: { flexDirection: 'row', justifyContent: 'space-around' }, // ✅ New style for 3 buttons
+  actionContainerThreeButtons: { flexDirection: 'row', justifyContent: 'space-around' },
   actionButton: {
     flex: 1,
     borderRadius: 12,
@@ -677,6 +690,42 @@ const styles = StyleSheet.create({
   },
   cancelModalButton: { backgroundColor: screenColors.cancelModalButton },
   submitModalButton: { backgroundColor: screenColors.submitModalButton },
+  fixedDateContainer: {
+    backgroundColor: screenColors.inputBackground,
+    borderRadius: 10,
+    paddingVertical: 14,
+    paddingHorizontal: 15,
+    marginBottom: 15,
+    borderWidth: 1,
+    borderColor: screenColors.inputBorder,
+    flexDirection: 'row',
+    alignItems: 'center',
+  },
+  fixedDateLabel: {
+    fontSize: 16,
+    color: screenColors.textSecondary,
+    marginRight: 8,
+  },
+  fixedDateValue: {
+    fontSize: 16,
+    color: screenColors.textPrimary,
+    fontWeight: '600',
+  },
+  // ✅✅✅ Styles for the new time picker button ✅✅✅
+  timePickerButton: {
+    backgroundColor: screenColors.inputBackground,
+    borderRadius: 10,
+    paddingVertical: 14,
+    paddingHorizontal: 15,
+    marginBottom: 15,
+    borderWidth: 1,
+    borderColor: screenColors.inputBorder,
+    alignItems: 'center',
+  },
+  timePickerButtonText: {
+    color: screenColors.textPrimary,
+    fontSize: 16,
+  },
 });
 
 export default DateDetailScreen;

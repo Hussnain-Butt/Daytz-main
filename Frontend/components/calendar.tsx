@@ -38,7 +38,7 @@ const VideoCalendar: React.FC<VideoCalendarProps> = ({ user, calendarData, plann
   const [markedDates, setMarkedDates] = useState<MarkedDates>({});
   const [currentMonth, setCurrentMonth] = useState(format(new Date(), 'yyyy-MM-dd'));
 
-  // ✅ USEEFFECT LOGIC UPDATED FOR NEW COLORS
+  // ✅ USEEFFECT LOGIC UPDATED FOR NEW COLORS AND DATE PARSING FIX
   useEffect(() => {
     const today = startOfToday();
     const newMarkedDates: MarkedDates = {};
@@ -46,7 +46,10 @@ const VideoCalendar: React.FC<VideoCalendarProps> = ({ user, calendarData, plann
     // 1. Mark dates with uploaded videos (Yellow) - This is the default
     calendarData.forEach((entry) => {
       if (entry.date && entry.userVideoUrl) {
-        const dateStr = format(new Date(entry.date), 'yyyy-MM-dd');
+        // 🛑 BUG FIX: Use parseISO instead of new Date() to correctly handle UTC dates
+        // OLD CODE: const dateStr = format(new Date(entry.date), 'yyyy-MM-dd');
+        const dateStr = format(parseISO(entry.date), 'yyyy-MM-dd');
+
         newMarkedDates[dateStr] = {
           marked: true,
           dotColor: colors.GoldPrimary, // Yellow for posted invite
@@ -56,6 +59,7 @@ const VideoCalendar: React.FC<VideoCalendarProps> = ({ user, calendarData, plann
 
     // 2. Mark pending/confirmed plans (Orange/Teal) - This will override the yellow dot
     plannedDates.forEach((pDate) => {
+      // This part was already correct
       const dateStr = format(parseISO(pDate.date), 'yyyy-MM-dd');
       if (pDate.status === 'pending') {
         newMarkedDates[dateStr] = { marked: true, dotColor: '#FFA500' }; // Orange for Pending

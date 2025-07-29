@@ -1,5 +1,5 @@
 // File: src/repository/CalendarDayRepository.ts
-// ✅ COMPLETE AND FINAL CORRECTED CODE
+// ✅ COMPLETE AND FINAL UPDATED CODE
 
 import pool from '../db'
 import {
@@ -14,6 +14,7 @@ import * as humps from 'humps'
 import moment from 'moment'
 
 class CalendarDayRepository {
+  // Yeh function abhi use nahi hoga, lekin rakhein.
   async findStoriesByDateWithUserDetails(date: string): Promise<StoryQueryResult[] | null> {
     const query = `
       SELECT
@@ -41,7 +42,42 @@ class CalendarDayRepository {
     }
   }
 
-  // ✅ FIX: ADDING BACK ALL MISSING METHODS
+  // ✅ NAYA FUNCTION: Location-based stories fetch karne ke liye
+  async findStoriesByDateAndZipcodes(
+    date: string,
+    zipcodeList: string[],
+  ): Promise<StoryQueryResult[] | null> {
+    const query = `
+      SELECT
+          cd.calendar_id AS "calendarId", cd.user_id AS "userId", cd.date,
+          cd.user_video_url AS "userVideoUrl", cd.vimeo_uri AS "vimeoUri",
+          cd.processing_status AS "processingStatus",
+          (u.first_name || ' ' || u.last_name) AS "userName",
+          u.profile_picture_url AS "profilePictureUrl"
+      FROM calendar_day cd
+      JOIN users u ON cd.user_id = u.user_id
+      WHERE 
+        cd.date = $1 
+        AND u.zipcode = ANY($2::text[])
+        AND cd.user_video_url IS NOT NULL 
+        AND cd.processing_status = 'complete'
+      ORDER BY u.zipcode, cd.created_at ASC;
+    `
+    try {
+      const { rows } = await pool.query(query, [date, zipcodeList])
+      return rows.map((row) => ({
+        ...row,
+        calendarId: parseInt(row.calendarId, 10),
+        date: moment(row.date).format('YYYY-MM-DD'),
+        userName: (row.userName || 'User').trim(),
+      }))
+    } catch (error) {
+      console.error('Error in findStoriesByDateAndZipcodes:', error)
+      return null
+    }
+  }
+
+  // --- Baaki sabhi functions bilkul waise hi rahenge ---
 
   async getCalendarDayById(calendarId: number): Promise<CalendarDay | null> {
     const query = `SELECT * FROM calendar_day WHERE calendar_id = $1`
@@ -93,7 +129,13 @@ class CalendarDayRepository {
   }
 
   async getNearbyZipcodes(zipcode: string, miles: number): Promise<string[] | null> {
-    if (![5, 10, 20].includes(miles)) return null
+    // Miles ki value ko `within_x_miles` column se match karna zaroori hai.
+    // Aapke database schema ke hisaab se yeh values `5`, `10`, `20` ho sakti hain.
+    const validMiles = [2, 5, 10, 20, 50] // Apne DB ke hisaab se adjust karein
+    if (!validMiles.includes(miles)) {
+      console.warn(`[Repo] Invalid miles value: ${miles}. Must be one of ${validMiles.join(', ')}`)
+      return null
+    }
     const columnName = `within_${miles}_miles`
     const query = `SELECT ${columnName} FROM zipcodes WHERE zipcode = $1`
     try {

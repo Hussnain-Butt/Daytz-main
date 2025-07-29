@@ -1,5 +1,4 @@
-// File: app/(app)/propose-date.tsx
-// ✅ COMPLETE AND FINAL UPDATED CODE
+// ✅ COMPLETE AND FINAL UPDATED CODE (WITH GOOGLE PLACES AUTOCOMPLETE)
 
 import React, { useState, useEffect, useCallback, useRef } from 'react';
 import {
@@ -11,12 +10,11 @@ import {
   ActivityIndicator,
   Platform,
   Keyboard,
-  TextInput,
+  // TextInput hata diya gaya hai, kyonki GooglePlacesAutocomplete apna TextInput use karta hai
   StatusBar as RNStatusBar,
   ScrollView,
   KeyboardAvoidingView,
   Modal,
-  FlatList,
 } from 'react-native';
 import { Text, Avatar } from 'react-native-paper';
 import { format, parseISO, isValid } from 'date-fns';
@@ -33,7 +31,9 @@ import {
 import { CreateDatePayload, DateObject as DateType } from '../../types/Date';
 import { User } from '../../types/User';
 import { Attraction as AttractionResponse } from '../../types/Attraction';
-import { useUserStore } from '../../store/useUserStore';
+
+// ✅ CHANGE: Google Places Autocomplete ko import karein
+import { GooglePlacesAutocomplete } from 'react-native-google-places-autocomplete';
 
 // --- Assets, Colors, Components (No changes here) ---
 const BACK_ARROW_ICON = require('../../assets/back_arrow_icon.png');
@@ -54,6 +54,7 @@ const screenColors = {
   GoldPrimary: '#FFD700',
   Black: '#000000',
   White: '#FFFFFF',
+  separator: '#3A3A3C', // Suggestions list ke liye separator color
 };
 const BubblePopup = ({ visible, type, title, message, buttonText, onClose }) => {
   if (!visible) return null;
@@ -79,6 +80,13 @@ const BubblePopup = ({ visible, type, title, message, buttonText, onClose }) => 
   );
 };
 
+// ✅ Naya type venue details store karne ke liye
+type VenueDetails = {
+  name: string;
+  address: string;
+  place_id: string;
+};
+
 const ProposeDateScreen = () => {
   const router = useRouter();
   const params = useLocalSearchParams<{ userToId: string; dateForProposal: string }>();
@@ -93,7 +101,8 @@ const ProposeDateScreen = () => {
   const [selectedEventDate, setSelectedEventDate] = useState<Date | null>(null);
   const [showTimePicker, setShowTimePicker] = useState(false);
   const [selectedTime, setSelectedTime] = useState<Date | null>(null);
-  const [venueName, setVenueName] = useState('');
+  // ✅ CHANGE: `venueName` ko `venueDetails` se replace kiya gaya
+  const [venueDetails, setVenueDetails] = useState<VenueDetails | null>(null);
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [popupState, setPopupState] = useState({
     visible: false,
@@ -113,6 +122,7 @@ const ProposeDateScreen = () => {
   };
 
   useEffect(() => {
+    // Baaki ka useEffect logic same rahega...
     RNStatusBar.setBarStyle('light-content');
     if (Platform.OS === 'android') RNStatusBar.setBackgroundColor(screenColors.background);
 
@@ -146,13 +156,9 @@ const ProposeDateScreen = () => {
 
         if (dateResponse.data) setExistingDate(dateResponse.data);
 
-        // ✅✅✅ --- THIS IS THE FIX --- ✅✅✅
-        // Hum ab `result` ko check nahi karenge. Agar notification aayi hai, to hum trust
-        // karenge ki match hai. Hum sirf yeh check karenge ki attraction ka data mila ya nahi.
         if (!attractionResponse.data) {
           throw new Error('Could not load your attraction details to create a proposal.');
         }
-        // ✅✅✅ --- END OF FIX --- ✅✅✅
         setMyAttraction(attractionResponse.data);
       } catch (err: any) {
         console.error('Failed to fetch initial data for propose date screen:', err);
@@ -177,8 +183,9 @@ const ProposeDateScreen = () => {
       showPopup('Error', 'Essential information is missing or match not found.', 'error');
       return;
     }
-    if (!selectedTime || !venueName.trim()) {
-      showPopup('Validation Error', 'Please fill out venue and time.', 'error');
+    // ✅ CHANGE: Ab `venueDetails` ko check karenge
+    if (!selectedTime || !venueDetails) {
+      showPopup('Validation Error', 'Please select a venue and time.', 'error');
       return;
     }
     setIsSubmitting(true);
@@ -187,7 +194,8 @@ const ProposeDateScreen = () => {
       userTo: userToId,
       date: format(selectedEventDate, 'yyyy-MM-dd'),
       time: format(selectedTime, 'HH:mm:ss'),
-      locationMetadata: { name: venueName.trim(), address: '' },
+      // ✅ CHANGE: Payload mein ab poora venue object jayega
+      locationMetadata: venueDetails,
       romanticRating: myAttraction.romanticRating || 0,
       sexualRating: myAttraction.sexualRating || 0,
       friendshipRating: myAttraction.friendshipRating || 0,
@@ -212,7 +220,8 @@ const ProposeDateScreen = () => {
     userToId,
     selectedEventDate,
     selectedTime,
-    venueName,
+    // ✅ CHANGE: Dependency ab `venueDetails` hai
+    venueDetails,
     myAttraction,
     router,
     logout,
@@ -241,7 +250,6 @@ const ProposeDateScreen = () => {
     );
   };
 
-  // --- JSX & Styles (No changes from here) ---
   if (isLoading) {
     return (
       <SafeAreaView style={[styles.container, styles.centered]}>
@@ -265,6 +273,7 @@ const ProposeDateScreen = () => {
       <KeyboardAvoidingView
         behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
         style={{ flex: 1 }}>
+        {/* ✅ CHANGE: ScrollView ko `keyboardShouldPersistTaps='handled'` dena zaroori hai */}
         <ScrollView
           contentContainerStyle={styles.scrollContentContainer}
           keyboardShouldPersistTaps="handled"
@@ -297,17 +306,39 @@ const ProposeDateScreen = () => {
               )}
               <View style={styles.inputContainer}>
                 <Text style={styles.inputLabel}>Venue</Text>
-                <TextInput
-                  style={styles.textInput}
-                  placeholder="e.g., boo Club, East Anaheim Street..."
-                  placeholderTextColor={screenColors.inputPlaceholder}
-                  value={venueName}
-                  onChangeText={setVenueName}
+
+                {/* ✅✅✅ VENUE TEXTINPUT REPLACED WITH GOOGLEPLACESAUTOCOMPLETE ✅✅✅ */}
+                <GooglePlacesAutocomplete
+                  placeholder="e.g., The Pike, Long Beach..."
+                  onPress={(data, details = null) => {
+                    // 'details' is provided when fetchDetails=true
+                    if (details) {
+                      setVenueDetails({
+                        name: details.name,
+                        address: details.formatted_address || '',
+                        place_id: details.place_id,
+                      });
+                    }
+                  }}
+                  query={{
+                    key: 'AIzaSyCxKxK1sBXyfpme2zIJaseUa8E_KWWqHkM',
+                    language: 'en',
+                  }}
+                  fetchDetails={true}
+                  styles={googlePlacesStyles}
+                  textInputProps={{
+                    placeholderTextColor: screenColors.inputPlaceholder,
+                  }}
+                  enablePoweredByContainer={false}
+                  listUnderlayColor={screenColors.inputBackground}
                 />
               </View>
               <View style={styles.inputContainer}>
                 <Text style={styles.inputLabel}>Time</Text>
-                <TouchableOpacity onPress={() => setShowTimePicker(true)} style={styles.textInput}>
+                {/* Time picker TouchableOpacity - ismein koi change nahi */}
+                <TouchableOpacity
+                  onPress={() => setShowTimePicker(true)}
+                  style={styles.timeInputButton}>
                   <Text
                     style={[
                       styles.inputText,
@@ -344,7 +375,43 @@ const ProposeDateScreen = () => {
   );
 };
 
+// ✅ CHANGE: Google Places Autocomplete ke liye naye styles
+const googlePlacesStyles = {
+  container: {
+    flex: 1,
+  },
+  textInput: {
+    backgroundColor: screenColors.inputBackground,
+    borderRadius: 12,
+    paddingHorizontal: 16,
+    height: 52,
+    fontSize: 16,
+    color: screenColors.textPrimary,
+  },
+  listView: {
+    backgroundColor: screenColors.inputBackground,
+    borderWidth: 1,
+    borderColor: screenColors.separator,
+    borderRadius: 8,
+    marginTop: 8,
+  },
+  row: {
+    backgroundColor: screenColors.inputBackground,
+    padding: 13,
+    height: 48,
+    flexDirection: 'row',
+  },
+  separator: {
+    height: 1,
+    backgroundColor: screenColors.separator,
+  },
+  description: {
+    color: screenColors.textPrimary,
+  },
+};
+
 const styles = StyleSheet.create({
+  // Purane styles same rahenge...
   container: {
     flex: 1,
     backgroundColor: screenColors.background,
@@ -396,20 +463,20 @@ const styles = StyleSheet.create({
     color: screenColors.textPrimary,
     marginVertical: 15,
   },
-  inputContainer: { marginBottom: 24 },
+  // ✅ CHANGE: Venue input container ki height z-index issue fix karne ke liye
+  inputContainer: { marginBottom: 24, zIndex: 1000 },
   inputLabel: {
     fontSize: 18,
     fontWeight: 'bold',
     color: screenColors.textPrimary,
     marginBottom: 10,
+    zIndex: 1001, // Label ko suggestions list ke upar rakhein
   },
-  textInput: {
+  timeInputButton: {
     backgroundColor: screenColors.inputBackground,
     borderRadius: 12,
     paddingHorizontal: 16,
     paddingVertical: 14,
-    fontSize: 16,
-    color: screenColors.textPrimary,
     height: 52,
     justifyContent: 'center',
   },

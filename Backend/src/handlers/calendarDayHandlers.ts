@@ -1,10 +1,9 @@
 // File: src/handlers/calendarDayHandlers.ts
-// ✅ COMPLETE AND FINAL CORRECTED CODE
+// ✅ COMPLETE AND FINAL UPDATED CODE (WITH LOCATION-BASED FILTERING)
 
 import { Request, Response, NextFunction } from 'express'
 import moment from 'moment'
 import fs from 'fs/promises'
-// Import types from the single source of truth
 import {
   CreateCalendarDay,
   CalendarDay,
@@ -12,57 +11,92 @@ import {
   StoryQueryResultWithUrl,
   NearbyVideoData as HandlerNearbyVideoData,
 } from '../types/CalendarDay'
-import { asyncHandler, CustomRequest } from '../middleware' // Use CustomRequest
+import { asyncHandler, CustomRequest } from '../middleware'
 import { upload, handleMulterError, handleVideoUpload, deleteVideoHandler } from '../uploadUtils'
 
 import CalendarDayService from '../services/internal/CalendarDayService'
 import UserService from '../services/internal/UserService'
 import CalendarDayRepository from '../repository/CalendarDayRepository'
 
-// Instantiate services
 const calendarDayService = new CalendarDayService()
 const userService = new UserService()
+// ✅ NAYA: Repository ko direct yahan use karenge
+const calendarDayRepository = new CalendarDayRepository()
 
 console.log('[CalendarDayHandler] Services instantiated.')
 
-// --- Get Stories By Date Handler ---
+// --- ✅✅✅ Get Stories By Date Handler (LOGIC REBUILT FOR LOCATION) ✅✅✅ ---
 export const getStoriesByDateHandler = asyncHandler(
   async (req: CustomRequest, res: Response, next: NextFunction) => {
-    // Use CustomRequest
     const targetDate = req.params.date
-    const loggedInUserId = req.userId // Get the logged-in user's ID
+    const loggedInUserId = req.userId // Authenticated user ka ID
 
-    console.log(
-      `[Handler:GetStories] User ${loggedInUserId} fetching stories for date: ${targetDate}`,
-    )
+    if (!loggedInUserId) {
+      return res.status(401).json({ message: 'Unauthorized. User not found.' })
+    }
 
     if (!targetDate || !moment(targetDate, 'YYYY-MM-DD', true).isValid()) {
       return res.status(400).json({ message: 'Invalid or missing date parameter (YYYY-MM-DD).' })
     }
 
+    console.log(
+      `[Handler:GetStories] User ${loggedInUserId} fetching NEARBY stories for date: ${targetDate}`,
+    )
+
     try {
-      const storiesData = await calendarDayService.getStoriesForDateWithFreshUrls(targetDate)
+      // Step 1: Logged-in user ka profile (aur zipcode) fetch karein
+      const currentUser = await userService.getUserById(loggedInUserId)
+      if (!currentUser || !currentUser.zipcode) {
+        console.log(
+          `[Handler:GetStories] User ${loggedInUserId} has no zipcode set. Returning empty list.`,
+        )
+        // Agar user ka zipcode nahi hai, to nearby stories nahi dikha sakte.
+        return res.status(200).json([])
+      }
+
+      // Step 2: User ke zipcode ke aas-paas ke zipcodes ki list nikalein
+      // Aap yahan miles ki value badal sakte hain (e.g., 2, 5, 10)
+      const MILES_RADIUS = 5 // ~8 kilometers
+      let nearbyZipcodes = await calendarDayRepository.getNearbyZipcodes(
+        currentUser.zipcode,
+        MILES_RADIUS,
+      )
+
+      // Hamesha user ka apna zipcode list mein shaamil karein
+      if (nearbyZipcodes) {
+        nearbyZipcodes = [...new Set([...nearbyZipcodes, currentUser.zipcode])]
+      } else {
+        nearbyZipcodes = [currentUser.zipcode]
+      }
+      console.log(`[Handler:GetStories] Searching in ${nearbyZipcodes.length} nearby zipcodes.`)
+
+      // Step 3: Service layer ko call karke un zipcodes ke liye stories fetch karein
+      const storiesData = await calendarDayService.getStoriesForDateWithFreshUrls(
+        targetDate,
+        nearbyZipcodes, // Naya parameter pass karein
+      )
+
       if (storiesData === null) {
         throw new Error('Service failed to retrieve stories data.')
       }
 
-      // ✅ --- FIX IS HERE ---
-      // The old logic was probably filtering out the current user's story.
-      // We are now REMOVING that filter and returning ALL stories for that date.
-      // This means every user will see their own story plus everyone else's.
+      // Step 4: User ki apni story ko final list se filter karein (agar backend se aa gayi ho)
+      const filteredStories = storiesData.filter((story) => story.userId !== loggedInUserId)
 
       console.log(
-        `[Handler:GetStories] Found ${storiesData.length} total stories for date: ${targetDate}. Returning all to user ${loggedInUserId}.`,
+        `[Handler:GetStories] Found ${storiesData.length} total stories nearby, returning ${filteredStories.length} to user ${loggedInUserId}.`,
       )
 
-      // Return the complete, unfiltered list of stories.
-      res.status(200).json(storiesData)
+      // Step 5: Filtered list ko frontend par bhejein
+      res.status(200).json(filteredStories)
     } catch (error) {
       console.error(`[Handler:GetStories] Error for date ${targetDate}:`, error)
       next(error)
     }
   },
 )
+
+// --- Baaki sabhi handlers bilkul waise hi rahenge ---
 
 // --- Upload Calendar Video Handler ---
 export const uploadCalendarVideoHandler = asyncHandler(
@@ -129,9 +163,7 @@ export const getCommunityActiveDatesHandler = asyncHandler(
     }
 
     try {
-      const repo = new CalendarDayRepository()
-      // This is a simplified logic. A full implementation needs a new repo method.
-      const myVideoEntries = await repo.getCalendarDaysByUserId(loggedInUserId)
+      const myVideoEntries = await calendarDayRepository.getCalendarDaysByUserId(loggedInUserId)
       const formattedDates = myVideoEntries.map((day) => ({
         date: day.date,
         hasMyVideo: true, // simplified
@@ -267,14 +299,13 @@ export const getCalendarDayVideosByUserAndDateHandler = asyncHandler(
         return res.status(200).json({ message: 'User zipcode not set.', nearbyVideos: [] })
       }
 
-      const repo = new CalendarDayRepository()
       const miles = 5
-      let zipcodeList = await repo.getNearbyZipcodes(user.zipcode, miles)
+      let zipcodeList = await calendarDayRepository.getNearbyZipcodes(user.zipcode, miles)
       if (!zipcodeList || !zipcodeList.includes(user.zipcode)) {
         zipcodeList = zipcodeList ? [...new Set([...zipcodeList, user.zipcode])] : [user.zipcode]
       }
 
-      const nearbyVideosFromRepo = await repo.getCalendarDayVideosByDateAndZipCode(
+      const nearbyVideosFromRepo = await calendarDayRepository.getCalendarDayVideosByDateAndZipCode(
         targetDate,
         zipcodeList,
       )

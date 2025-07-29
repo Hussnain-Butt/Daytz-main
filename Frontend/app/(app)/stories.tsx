@@ -1,5 +1,6 @@
 // --- COMPLETE FINAL UPDATED CODE: app/(app)/stories/index.tsx ---
-// This version integrates the BubblePopup component and filters out the current user's own stories.
+// This version removes the frontend filtering, as the backend now handles it.
+// This version also includes a critical fix for the auto-play crash issue.
 
 import React, { useState, useEffect, useRef, useCallback, useMemo } from 'react';
 import {
@@ -12,11 +13,11 @@ import {
   TouchableOpacity,
   Image,
   FlatList,
-  Alert, // Confirmation dialogs ke liye rakha gaya hai
+  Alert,
   Platform,
   StatusBar,
   Animated,
-  Modal, // BubblePopup ke liye import
+  Modal,
 } from 'react-native';
 import { useRouter, useLocalSearchParams, useFocusEffect } from 'expo-router';
 import { Video, ResizeMode, AVPlaybackStatus } from 'expo-av';
@@ -24,7 +25,12 @@ import { Gesture, GestureDetector } from 'react-native-gesture-handler';
 import { runOnJS, useSharedValue, useAnimatedStyle, withTiming } from 'react-native-reanimated';
 import { BottomSheetModal, BottomSheetView, BottomSheetBackdrop } from '@gorhom/bottom-sheet';
 
-import { getStoriesByDate, getPlayableVideoUrl } from '../../api/api';
+import {
+  getStoriesByDate,
+  getPlayableVideoUrl,
+  getAttractionByUserFromUserToAndDate,
+} from '../../api/api';
+
 import { useAuth } from '../../contexts/AuthContext';
 import { StoryQueryResult } from '../../types/CalendarDay';
 
@@ -36,11 +42,8 @@ const CLOSE_ICON = require('../../assets/close_icon.png');
 const ATTRACTION_ICON = require('../../assets/calendarButton.png');
 const BLOCK_ICON = require('../../assets/blockIcon.png');
 const DEFAULT_PROFILE_PIC = require('../../assets/characterIcon.png');
-
-// =====> ALERT KI TASVEEREIN IMPORT KAREIN (PATH THEEK KAREIN) <=====
 const calcHappyIcon = require('../../assets/calc-happy.png');
 const calcErrorIcon = require('../../assets/calc-error.png');
-// =====================================================================
 
 // --- Layout and Style Constants ---
 const { width: SCREEN_WIDTH, height: SCREEN_HEIGHT } = Dimensions.get('window');
@@ -66,6 +69,7 @@ interface VideoLoadStateMap {
 }
 interface StoryWithKey extends StoryQueryResult {
   uniqueStoryId: string;
+  hasExistingAttraction: boolean;
 }
 interface StoryProgressBarsProps {
   storiesCount: number;
@@ -158,6 +162,7 @@ const styles = StyleSheet.create({
   actionButton: { alignItems: 'center', padding: 10 },
   actionIcon: { width: 36, height: 36, marginBottom: 4 },
   actionButtonText: { color: '#FFF', fontSize: 11, fontWeight: '600' },
+  disabledActionButton: { opacity: 0.4 },
   progressBarsContainer: {
     flexDirection: 'row',
     height: 3,
@@ -224,26 +229,23 @@ const styles = StyleSheet.create({
   successButtonText: { color: colors.Black || '#000000', fontSize: 15, fontWeight: 'bold' },
 });
 
-// --- NEW BUBBLE POPUP COMPONENT ---
 const BubblePopup = ({ visible, type, title, message, buttonText, onClose }) => {
-  if (!visible) {
-    return null;
-  }
+  if (!visible) return null;
   const isSuccess = type === 'success';
-  const imageSource = isSuccess ? calcHappyIcon : calcErrorIcon;
-  const buttonStyle = isSuccess ? styles.successButton : styles.errorButton;
-  const buttonTextStyle = isSuccess ? styles.successButtonText : styles.errorButtonText;
-
   return (
     <Modal transparent visible={visible} animationType="fade" onRequestClose={onClose}>
       <View style={styles.overlay}>
         <View style={styles.popupContainer}>
-          <Image source={imageSource} style={styles.popupImage} />
+          <Image source={isSuccess ? calcHappyIcon : calcErrorIcon} style={styles.popupImage} />
           <View style={styles.bubble}>
             <Text style={styles.popupTitle}>{title}</Text>
             <Text style={styles.popupMessage}>{message}</Text>
-            <TouchableOpacity style={[styles.popupButton, buttonStyle]} onPress={onClose}>
-              <Text style={buttonTextStyle}>{buttonText}</Text>
+            <TouchableOpacity
+              style={[styles.popupButton, isSuccess ? styles.successButton : styles.errorButton]}
+              onPress={onClose}>
+              <Text style={isSuccess ? styles.successButtonText : styles.errorButtonText}>
+                {buttonText}
+              </Text>
             </TouchableOpacity>
           </View>
         </View>
@@ -251,7 +253,6 @@ const BubblePopup = ({ visible, type, title, message, buttonText, onClose }) => 
     </Modal>
   );
 };
-// --- END OF BUBBLE POPUP COMPONENT ---
 
 const StoryProgressBars: React.FC<StoryProgressBarsProps> = React.memo(
   ({ storiesCount, currentStoryIndex, currentVideoProgress, onBarPress }) => {
@@ -259,13 +260,12 @@ const StoryProgressBars: React.FC<StoryProgressBarsProps> = React.memo(
     return (
       <View style={styles.progressBarsContainer}>
         {Array.from({ length: storiesCount }).map((_, index) => {
-          const animatedStyle = useAnimatedStyle(() => {
-            const widthPercentage =
-              index === currentStoryIndex
-                ? Math.max(0, Math.min(1, currentVideoProgress.value)) * 100
-                : 0;
-            return { width: withTiming(`${widthPercentage}%`, { duration: 50 }) };
-          });
+          const animatedStyle = useAnimatedStyle(() => ({
+            width: withTiming(
+              `${index === currentStoryIndex ? Math.max(0, Math.min(1, currentVideoProgress.value)) * 100 : 0}%`,
+              { duration: 50 }
+            ),
+          }));
           return (
             <TouchableOpacity
               key={`progress-${index}`}
@@ -310,6 +310,7 @@ const StoryPage = React.memo(
     onNavigateBack,
     onNavigateToAttraction,
     onBlockUser,
+    isAttractionDisabled,
   }) => {
     const panGesture = Gesture.Pan()
       .activeOffsetY([-10, 10])
@@ -389,7 +390,10 @@ const StoryPage = React.memo(
             <View style={{ flex: 1 }} pointerEvents="none" />
             <View style={styles.footer}>
               <View style={styles.actionsContainer}>
-                <TouchableOpacity onPress={onNavigateToAttraction} style={styles.actionButton}>
+                <TouchableOpacity
+                  onPress={onNavigateToAttraction}
+                  style={[styles.actionButton, isAttractionDisabled && styles.disabledActionButton]}
+                  disabled={isAttractionDisabled}>
                   <Image source={ATTRACTION_ICON} style={styles.actionIcon} />
                   <Text style={styles.actionButtonText}>Attraction</Text>
                 </TouchableOpacity>
@@ -409,7 +413,6 @@ const StoryPage = React.memo(
 export default function StoriesScreen() {
   const router = useRouter();
   const { auth0User: authUser, isLoading: authContextLoading } = useAuth();
-
   const params = useLocalSearchParams<{ date?: string; initialUserId?: string }>();
   const { date, initialUserId } = params;
   const storyDate = date;
@@ -457,7 +460,6 @@ export default function StoriesScreen() {
     setError(`Failed to ${context}. Please try again.`);
   }, []);
 
-  // ✅✅✅ UPDATE: Ab yeh useEffect user ki apni story ko filter kar dega ✅✅✅
   useEffect(() => {
     if (!date) {
       handleApiError('Date parameter is missing.', 'initialization');
@@ -469,49 +471,60 @@ export default function StoriesScreen() {
       setLoading(false);
       return;
     }
-    if (!authUser) return;
+    if (!authUser?.sub) return;
 
-    setLoading(true);
-    setError(null);
-    setStories([]);
-    getStoriesByDate(date)
-      .then((response) => {
-        const fetchedStories = (response.data || []) as StoryQueryResult[];
+    const fetchStoriesAndAttractions = async () => {
+      setLoading(true);
+      setError(null);
+      setStories([]);
 
-        // --- LOGGED-IN USER KI STORY HATAANE KA LOGIC ---
-        // Yahan hum `authUser.sub` (user ID) ka istemal karke stories filter kar rahe hain.
-        const storiesFromOtherUsers = fetchedStories.filter(
-          (story) => story.userId !== authUser.sub
+      try {
+        const response = await getStoriesByDate(date);
+        const storiesFromOtherUsers = (response.data || []) as StoryQueryResult[];
+
+        if (storiesFromOtherUsers.length === 0) {
+          setStories([]);
+          setLoading(false);
+          return;
+        }
+
+        const attractionChecks = storiesFromOtherUsers.map((story) =>
+          getAttractionByUserFromUserToAndDate(authUser.sub!, story.userId, date)
+            .then((res) => !!res.data)
+            .catch(() => false)
         );
-        // -----------------------------------------------
 
-        const storiesWithKeys: StoryWithKey[] = storiesFromOtherUsers.map((story, index) => ({
+        const attractionResults = await Promise.all(attractionChecks);
+
+        const storiesWithFullData: StoryWithKey[] = storiesFromOtherUsers.map((story, index) => ({
           ...story,
           userName: story.userName || 'User',
           uniqueStoryId: story.calendarId?.toString() ?? `generated-${date}-${index}`,
+          hasExistingAttraction: attractionResults[index],
         }));
 
         if (initialUserId) {
-          const initialIndex = storiesWithKeys.findIndex((s) => s.userId === initialUserId);
+          const initialIndex = storiesWithFullData.findIndex((s) => s.userId === initialUserId);
           if (initialIndex !== -1) {
-            console.log(`[Stories] Found initial user at index: ${initialIndex}`);
-            setStories(storiesWithKeys);
+            setStories(storiesWithFullData);
             setTimeout(() => {
               flatListRef.current?.scrollToIndex({ index: initialIndex, animated: false });
               setCurrentIndex(initialIndex);
             }, 100);
           } else {
-            console.warn(
-              `[Stories] initialUserId ${initialUserId} not found in stories for date ${date} (or it was the current user's story).`
-            );
-            setStories(storiesWithKeys);
+            setStories(storiesWithFullData);
           }
         } else {
-          setStories(storiesWithKeys);
+          setStories(storiesWithFullData);
         }
-      })
-      .catch((e: any) => handleApiError(e, 'fetching stories'))
-      .finally(() => setLoading(false));
+      } catch (e: any) {
+        handleApiError(e, 'fetching stories');
+      } finally {
+        setLoading(false);
+      }
+    };
+
+    fetchStoriesAndAttractions();
   }, [date, authUser, authContextLoading, handleApiError, initialUserId]);
 
   useEffect(() => {
@@ -534,14 +547,18 @@ export default function StoriesScreen() {
       fetchUrlForStory(currentIndex);
       if (currentIndex + 1 < stories.length) fetchUrlForStory(currentIndex + 1);
     }
-  }, [currentIndex, stories]);
+  }, [currentIndex, stories, playableUrls]); // Added playableUrls to dependencies to avoid re-fetching on state update
 
   const pauseAllVideos = useCallback(async () => {
     await Promise.all(Object.values(videoRefs.current).map((v) => v?.pauseAsync().catch(() => {})));
   }, []);
+
   const playCurrentVideo = useCallback(async () => {
+    if (stories.length === 0 || currentIndex < 0 || currentIndex >= stories.length) return;
     const storyId = stories[currentIndex]?.uniqueStoryId;
-    if (storyId) videoRefs.current[storyId]?.playAsync().catch(() => {});
+    if (storyId) {
+      videoRefs.current[storyId]?.playAsync().catch(() => {});
+    }
   }, [stories, currentIndex]);
 
   useEffect(() => {
@@ -574,6 +591,7 @@ export default function StoriesScreen() {
     await pauseAllVideos();
     router.canGoBack() ? router.back() : router.replace('/calendar');
   }, [router, pauseAllVideos]);
+
   const navigateToAttraction = useCallback(
     async (targetUserToId: string) => {
       if (!storyDate) return showPopup('Error', 'Story date not found.', 'error');
@@ -587,6 +605,7 @@ export default function StoriesScreen() {
     },
     [storyDate, pauseAllVideos, router]
   );
+
   const blockUser = useCallback(
     (userId: string, userName?: string) => {
       Alert.alert('Block User', `Are you sure you want to block ${userName || 'this user'}?`, [
@@ -612,13 +631,16 @@ export default function StoriesScreen() {
     },
     [stories, currentIndex, pauseAllVideos, navigateBack]
   );
+
   const handlePresentModalPress = useCallback((userId: string) => {
     setSelectedUserIdForModal(userId);
     bottomSheetModalRef.current?.present();
   }, []);
+
   const handleSheetChanges = useCallback((index: number) => {
     if (index === -1) setSelectedUserIdForModal(null);
   }, []);
+
   const renderBackdrop = useCallback(
     (props: any) => (
       <BottomSheetBackdrop
@@ -632,29 +654,67 @@ export default function StoriesScreen() {
     []
   );
 
-  const onViewableItemsChanged = useRef(({ viewableItems }: any) => {
-    if (viewableItems.length > 0 && viewableItems[0].index !== currentIndex) {
-      runOnJS(setCurrentIndex)(viewableItems[0].index);
-      currentVideoProgress.value = 0;
-    }
-  }).current;
+  // ✅✅✅ CHANGE 1: ROBUST NAVIGATION FUNCTION ✅✅✅
+  // This function is now the single source of truth for programmatic navigation
+  // (auto-play, progress bar taps). It ensures the old video is stopped before
+  // moving to the next one, preventing audio overlap and crashes.
   const goToStory = useCallback(
     (index: number) => {
       if (index < 0 || index >= stories.length || index === currentIndex) return;
-      videoRefs.current[stories[currentIndex]?.uniqueStoryId]?.setPositionAsync(0);
+
+      // Explicitly stop the currently playing video. This is the core fix.
+      const oldStoryId = stories[currentIndex]?.uniqueStoryId;
+      if (oldStoryId && videoRefs.current[oldStoryId]) {
+        videoRefs.current[oldStoryId]?.stopAsync().catch(() => {
+          // Ignore errors, e.g., if video is already stopped
+        });
+      }
+
+      // Update the index state immediately and authoritatively.
+      setCurrentIndex(index);
+      currentVideoProgress.value = 0;
+
+      // Scroll the FlatList to the new story.
       flatListRef.current?.scrollToIndex({ index, animated: true });
-      if (Platform.OS === 'android') {
-        setCurrentIndex(index);
+    },
+    [stories, currentIndex] // Dependencies are correct
+  );
+
+  // ✅✅✅ CHANGE 2: REFINED VIEW CHANGE HANDLER ✅✅✅
+  // This now reliably handles manual swipes by the user and sets the new index.
+  // It won't conflict with `goToStory` because `goToStory` updates the `currentIndex`
+  // synchronously, making the condition `newVisibleIndex !== currentIndex` false
+  // during programmatic scrolls.
+  const onViewableItemsChanged = useRef(({ viewableItems }: any) => {
+    if (viewableItems.length > 0) {
+      const newVisibleIndex = viewableItems[0].index;
+      if (newVisibleIndex !== currentIndex) {
+        // Stop the previous video just in case, providing an extra layer of safety for swipes.
+        const oldStoryId = stories[currentIndex]?.uniqueStoryId;
+        if (oldStoryId && videoRefs.current[oldStoryId]) {
+          videoRefs.current[oldStoryId]?.stopAsync().catch(() => {});
+        }
+        runOnJS(setCurrentIndex)(newVisibleIndex);
         currentVideoProgress.value = 0;
       }
-    },
-    [stories, currentIndex]
-  );
+    }
+  }).current;
+
   const onVideoTap = useCallback(async (storyId: string) => {
     const video = videoRefs.current[storyId];
     if (!video) return;
-    const status = await video.getStatusAsync();
-    if (status.isLoaded) status.isPlaying ? video.pauseAsync() : video.playAsync();
+    try {
+      const status = await video.getStatusAsync();
+      if (status.isLoaded) {
+        if (status.isPlaying) {
+          await video.pauseAsync();
+        } else {
+          await video.playAsync();
+        }
+      }
+    } catch (error) {
+      console.error('Error toggling video playback:', error);
+    }
   }, []);
 
   const renderItem = useCallback(
@@ -675,8 +735,17 @@ export default function StoriesScreen() {
               runOnJS(setVideoLoadStates)((prev) => ({ ...prev, [storyId]: 'loaded' }));
             if (status.durationMillis)
               currentVideoProgress.value = status.positionMillis / status.durationMillis;
+
+            // ✅✅✅ CHANGE 3: AUTO-PLAY LOGIC UPDATE ✅✅✅
+            // When a video finishes, it now calls our robust `goToStory` function.
+            // This ensures a clean, crash-free transition to the next story.
             if (status.didJustFinish && !status.isLooping) {
-              index < stories.length - 1 ? runOnJS(goToStory)(index + 1) : runOnJS(navigateBack)();
+              const nextIndex = index + 1;
+              if (nextIndex < stories.length) {
+                runOnJS(goToStory)(nextIndex);
+              } else {
+                runOnJS(navigateBack)();
+              }
             }
           }}
           onVideoLoadStart={() =>
@@ -695,6 +764,7 @@ export default function StoriesScreen() {
           onNavigateBack={navigateBack}
           onNavigateToAttraction={() => navigateToAttraction(item.userId)}
           onBlockUser={() => blockUser(item.userId, item.userName)}
+          isAttractionDisabled={item.hasExistingAttraction}
         />
       );
     },
@@ -703,7 +773,7 @@ export default function StoriesScreen() {
       stories,
       playableUrls,
       videoLoadStates,
-      goToStory,
+      goToStory, // Using the new robust function
       navigateBack,
       navigateToAttraction,
       blockUser,
@@ -732,7 +802,7 @@ export default function StoriesScreen() {
   if (!loading && stories.length === 0) {
     return (
       <SafeAreaView style={[styles.container, styles.centered]}>
-        <Text style={styles.messageText}>No stories for this date.</Text>
+        <Text style={styles.messageText}>No nearby stories found for this date.</Text>
         <TouchableOpacity onPress={navigateBack} style={styles.messageButton}>
           <Text style={styles.messageButtonText}>Go Back</Text>
         </TouchableOpacity>
@@ -751,7 +821,7 @@ export default function StoriesScreen() {
         pagingEnabled
         showsHorizontalScrollIndicator={false}
         onViewableItemsChanged={onViewableItemsChanged}
-        viewabilityConfig={{ viewAreaCoveragePercentThreshold: 50 }}
+        viewabilityConfig={{ viewAreaCoveragePercentThreshold: 50, waitForInteraction: false }}
         initialNumToRender={1}
         maxToRenderPerBatch={1}
         windowSize={3}
