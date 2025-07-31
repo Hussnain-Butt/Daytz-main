@@ -34,7 +34,6 @@ export const createUserHandler = asyncHandler(
     }
 
     try {
-      // Step 1: Check if user already exists in our database
       const existingUser = await userService.getUserById(auth0UserId)
       if (existingUser) {
         console.log(
@@ -43,7 +42,6 @@ export const createUserHandler = asyncHandler(
         return res.status(200).json(existingUser)
       }
 
-      // Step 2: If user does not exist, proceed with creation
       console.log(`[CreateUser] New user flow initiated for Auth0 ID: ${auth0UserId}`)
       const { email } = req.body
       if (!email || typeof email !== 'string') {
@@ -53,7 +51,6 @@ export const createUserHandler = asyncHandler(
       const newUserInternalData: CreateUserInternalData = { userId: auth0UserId, ...req.body }
       const createdUser = await userService.createUser(newUserInternalData)
 
-      // Step 3: Verify that the user was actually created before sending a success response.
       if (!createdUser || !createdUser.userId) {
         console.error(
           `[CreateUser] CRITICAL: UserService.createUser returned null or invalid data for Auth0 ID ${auth0UserId}.`,
@@ -240,12 +237,7 @@ export const uploadProfilePictureHandler = asyncHandler(
         const imageExtension = path.extname(req.file.originalname).toLowerCase() || '.png'
         const newImageS3Key = `user-${userId}/profile-${Date.now()}${imageExtension}`
 
-        // ✅✅✅ --- THIS IS THE FIX --- ✅✅✅
-        // A "wrapper function" is created to bridge the type mismatch.
-        // It takes a `Partial<User>` and passes it to `userService.updateUser` which now expects `UpdateUserPayload`.
         const updateUserForUpload = (id: string, data: Partial<User>): Promise<User | null> => {
-          // We cast `data` to `UpdateUserPayload`. This is safe because `uploadImageHandler` only
-          // adds `profilePictureUrl`, which is a valid field in `UpdateUserPayload`.
           return userService.updateUser(id, data as UpdateUserPayload)
         }
 
@@ -257,10 +249,8 @@ export const uploadProfilePictureHandler = asyncHandler(
           s3BucketName,
           newImageS3Key,
           'profilePictureUrl',
-          // The wrapper function is passed instead of the original service method.
           updateUserForUpload,
         )
-        // ✅✅✅ --- END OF FIX --- ✅✅✅
       } catch (error) {
         if (!res.headersSent) next(error)
       } finally {
@@ -321,6 +311,64 @@ export const registerPushTokenHandler = asyncHandler(
       res.status(200).json({ message: 'FCM token registered successfully.' })
     } catch (error) {
       console.error(`[RegisterPushToken] Error for user ${userId}:`, error)
+      next(error)
+    }
+  },
+)
+
+// ✅✅✅ --- NAYE HANDLERS: BLOCK/UNBLOCK --- ✅✅✅
+export const blockUserHandler = asyncHandler(
+  async (req: CustomRequest, res: Response, next: NextFunction) => {
+    const blockerId = req.userId
+    const { userId: blockedId } = req.body
+
+    if (!blockerId) return res.status(401).json({ message: 'Unauthorized.' })
+    if (!blockedId) return res.status(400).json({ message: 'User ID to block is required.' })
+
+    try {
+      await userService.blockUser(blockerId, blockedId)
+      res.status(200).json({ message: 'User blocked successfully.' })
+    } catch (error: any) {
+      if (error.message.includes('duplicate key')) {
+        return res.status(409).json({ message: 'User already blocked.' })
+      }
+      if (error.message.includes('not found')) {
+        return res.status(404).json({ message: error.message })
+      }
+      next(error)
+    }
+  },
+)
+
+export const unblockUserHandler = asyncHandler(
+  async (req: CustomRequest, res: Response, next: NextFunction) => {
+    const blockerId = req.userId
+    const { userId: blockedId } = req.body
+
+    if (!blockerId) return res.status(401).json({ message: 'Unauthorized.' })
+    if (!blockedId) return res.status(400).json({ message: 'User ID to unblock is required.' })
+
+    try {
+      const success = await userService.unblockUser(blockerId, blockedId)
+      if (!success) {
+        return res.status(404).json({ message: 'Block relationship not found.' })
+      }
+      res.status(200).json({ message: 'User unblocked successfully.' })
+    } catch (error) {
+      next(error)
+    }
+  },
+)
+
+export const getBlockedUsersHandler = asyncHandler(
+  async (req: CustomRequest, res: Response, next: NextFunction) => {
+    const blockerId = req.userId
+    if (!blockerId) return res.status(401).json({ message: 'Unauthorized.' })
+
+    try {
+      const blockedUsers = await userService.getBlockedUsers(blockerId)
+      res.status(200).json(blockedUsers)
+    } catch (error) {
       next(error)
     }
   },

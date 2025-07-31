@@ -1,6 +1,5 @@
 // --- COMPLETE FINAL UPDATED CODE: app/(app)/stories/index.tsx ---
-// This version removes the frontend filtering, as the backend now handles it.
-// This version also includes a critical fix for the auto-play crash issue.
+// This version implements the "disable story on block" and "unblock" button logic.
 
 import React, { useState, useEffect, useRef, useCallback, useMemo } from 'react';
 import {
@@ -25,10 +24,13 @@ import { Gesture, GestureDetector } from 'react-native-gesture-handler';
 import { runOnJS, useSharedValue, useAnimatedStyle, withTiming } from 'react-native-reanimated';
 import { BottomSheetModal, BottomSheetView, BottomSheetBackdrop } from '@gorhom/bottom-sheet';
 
+// ✅ unblockUser API function import karein
 import {
   getStoriesByDate,
   getPlayableVideoUrl,
   getAttractionByUserFromUserToAndDate,
+  blockUser as apiBlockUser,
+  unblockUser as apiUnblockUser,
 } from '../../api/api';
 
 import { useAuth } from '../../contexts/AuthContext';
@@ -41,6 +43,7 @@ import { colors } from '../../utils/theme';
 const CLOSE_ICON = require('../../assets/close_icon.png');
 const ATTRACTION_ICON = require('../../assets/calendarButton.png');
 const BLOCK_ICON = require('../../assets/blockIcon.png');
+const UNBLOCK_ICON = require('../../assets/unblockIcon.png'); // ✅ NAYA ICON (Make sure this file exists in assets)
 const DEFAULT_PROFILE_PIC = require('../../assets/characterIcon.png');
 const calcHappyIcon = require('../../assets/calc-happy.png');
 const calcErrorIcon = require('../../assets/calc-error.png');
@@ -61,15 +64,17 @@ const VIDEO_CARD_HEIGHT = Math.max(150, CALCULATED_VIDEO_CARD_HEIGHT);
 const VIDEO_CARD_WIDTH = SCREEN_WIDTH - 2 * CARD_HORIZONTAL_INSET;
 
 // --- Interfaces and Types ---
+// ✅ Story type mein `isBlocked` add karein
+interface StoryWithKey extends StoryQueryResult {
+  uniqueStoryId: string;
+  hasExistingAttraction: boolean;
+  isBlocked: boolean;
+}
 interface PlayableUrlMap {
   [key: string]: string | null | 'loading' | 'error';
 }
 interface VideoLoadStateMap {
   [key: string]: 'initial' | 'loading' | 'loaded' | 'error';
-}
-interface StoryWithKey extends StoryQueryResult {
-  uniqueStoryId: string;
-  hasExistingAttraction: boolean;
 }
 interface StoryProgressBarsProps {
   storiesCount: number;
@@ -108,6 +113,21 @@ const styles = StyleSheet.create({
     overflow: 'hidden',
   },
   videoElement: { ...StyleSheet.absoluteFillObject },
+  // ✅ NAYA: Blocked story ke liye overlay
+  blockedOverlay: {
+    ...StyleSheet.absoluteFillObject,
+    backgroundColor: 'rgba(0, 0, 0, 0.7)',
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  blockedText: {
+    color: '#FFF',
+    fontSize: 22,
+    fontWeight: 'bold',
+    textShadowColor: 'rgba(0,0,0,0.8)',
+    textShadowOffset: { width: 1, height: 1 },
+    textShadowRadius: 3,
+  },
   videoCardActivityIndicator: {
     ...StyleSheet.absoluteFillObject,
     justifyContent: 'center',
@@ -310,6 +330,7 @@ const StoryPage = React.memo(
     onNavigateBack,
     onNavigateToAttraction,
     onBlockUser,
+    onUnblockUser,
     isAttractionDisabled,
   }) => {
     const panGesture = Gesture.Pan()
@@ -323,10 +344,17 @@ const StoryPage = React.memo(
           runOnJS(onPresentModal)();
         }
       });
+
+    const isBlocked = item.isBlocked;
+
     return (
       <GestureDetector gesture={panGesture}>
         <View style={styles.page}>
-          <TouchableOpacity style={styles.videoCard} activeOpacity={1} onPress={onVideoTap}>
+          <TouchableOpacity
+            style={styles.videoCard}
+            activeOpacity={1}
+            onPress={onVideoTap}
+            disabled={isBlocked}>
             {playableUrl && playableUrl !== 'loading' && playableUrl !== 'error' && (
               <Video
                 ref={videoRef}
@@ -335,7 +363,7 @@ const StoryPage = React.memo(
                 resizeMode={ResizeMode.COVER}
                 isLooping={storiesCount === 1}
                 shouldPlay={false}
-                isMuted={false}
+                isMuted={isBlocked}
                 progressUpdateIntervalMillis={100}
                 onPlaybackStatusUpdate={onPlaybackStatusUpdate}
                 onLoadStart={onVideoLoadStart}
@@ -345,18 +373,25 @@ const StoryPage = React.memo(
                 bufferForPlaybackAfterRebufferMs={Platform.OS === 'android' ? 3000 : 2000}
               />
             )}
+            {isBlocked && (
+              <View style={styles.blockedOverlay}>
+                <Text style={styles.blockedText}>Blocked</Text>
+              </View>
+            )}
             {(videoLoadState === 'loading' || videoLoadState === 'initial') &&
+              !isBlocked &&
               playableUrl !== 'error' &&
               playableUrl !== null && (
                 <View style={styles.videoCardActivityIndicator}>
                   <ActivityIndicator size="large" color={colors.White || '#FFF'} />
                 </View>
               )}
-            {(playableUrl === 'error' || playableUrl === null || videoLoadState === 'error') && (
-              <View style={styles.videoCardErrorDisplay}>
-                <Text style={styles.errorTextVideo}>Video unavailable</Text>
-              </View>
-            )}
+            {(playableUrl === 'error' || playableUrl === null || videoLoadState === 'error') &&
+              !isBlocked && (
+                <View style={styles.videoCardErrorDisplay}>
+                  <Text style={styles.errorTextVideo}>Video unavailable</Text>
+                </View>
+              )}
           </TouchableOpacity>
           <SafeAreaView style={styles.overlayContainer} pointerEvents="box-none">
             <View style={styles.header}>
@@ -364,7 +399,7 @@ const StoryPage = React.memo(
                 storiesCount={storiesCount}
                 currentStoryIndex={currentIndex}
                 currentVideoProgress={currentVideoProgress}
-                onBarPress={onGoToStory}
+                onBarPress={isBlocked ? undefined : onGoToStory}
               />
               <View style={styles.headerTopRow}>
                 <TouchableOpacity
@@ -392,15 +427,25 @@ const StoryPage = React.memo(
               <View style={styles.actionsContainer}>
                 <TouchableOpacity
                   onPress={onNavigateToAttraction}
-                  style={[styles.actionButton, isAttractionDisabled && styles.disabledActionButton]}
-                  disabled={isAttractionDisabled}>
+                  style={[
+                    styles.actionButton,
+                    (isAttractionDisabled || isBlocked) && styles.disabledActionButton,
+                  ]}
+                  disabled={isAttractionDisabled || isBlocked}>
                   <Image source={ATTRACTION_ICON} style={styles.actionIcon} />
                   <Text style={styles.actionButtonText}>Attraction</Text>
                 </TouchableOpacity>
-                <TouchableOpacity onPress={onBlockUser} style={styles.actionButton}>
-                  <Image source={BLOCK_ICON} style={styles.actionIcon} />
-                  <Text style={styles.actionButtonText}>Block</Text>
-                </TouchableOpacity>
+                {isBlocked ? (
+                  <TouchableOpacity onPress={onUnblockUser} style={styles.actionButton}>
+                    <Image source={UNBLOCK_ICON} style={styles.actionIcon} />
+                    <Text style={styles.actionButtonText}>Unblock</Text>
+                  </TouchableOpacity>
+                ) : (
+                  <TouchableOpacity onPress={onBlockUser} style={styles.actionButton}>
+                    <Image source={BLOCK_ICON} style={styles.actionIcon} />
+                    <Text style={styles.actionButtonText}>Block</Text>
+                  </TouchableOpacity>
+                )}
               </View>
             </View>
           </SafeAreaView>
@@ -445,6 +490,12 @@ export default function StoriesScreen() {
 
   const flatListRef = useRef<FlatList<StoryWithKey>>(null);
   const videoRefs = useRef<Record<string, Video | null>>({});
+
+  const updateStoryInState = (userId: string, updates: Partial<StoryWithKey>) => {
+    setStories((prevStories) =>
+      prevStories.map((story) => (story.userId === userId ? { ...story, ...updates } : story))
+    );
+  };
 
   useEffect(() => {
     StatusBar.setBarStyle('light-content');
@@ -501,6 +552,7 @@ export default function StoriesScreen() {
           userName: story.userName || 'User',
           uniqueStoryId: story.calendarId?.toString() ?? `generated-${date}-${index}`,
           hasExistingAttraction: attractionResults[index],
+          isBlocked: story.isBlocked || false, // Ensure isBlocked is always boolean
         }));
 
         if (initialUserId) {
@@ -547,7 +599,7 @@ export default function StoriesScreen() {
       fetchUrlForStory(currentIndex);
       if (currentIndex + 1 < stories.length) fetchUrlForStory(currentIndex + 1);
     }
-  }, [currentIndex, stories, playableUrls]); // Added playableUrls to dependencies to avoid re-fetching on state update
+  }, [currentIndex, stories, playableUrls]);
 
   const pauseAllVideos = useCallback(async () => {
     await Promise.all(Object.values(videoRefs.current).map((v) => v?.pauseAsync().catch(() => {})));
@@ -555,11 +607,17 @@ export default function StoriesScreen() {
 
   const playCurrentVideo = useCallback(async () => {
     if (stories.length === 0 || currentIndex < 0 || currentIndex >= stories.length) return;
-    const storyId = stories[currentIndex]?.uniqueStoryId;
+    const currentStory = stories[currentIndex];
+
+    if (currentStory.isBlocked) {
+      await pauseAllVideos();
+      return;
+    }
+    const storyId = currentStory.uniqueStoryId;
     if (storyId) {
       videoRefs.current[storyId]?.playAsync().catch(() => {});
     }
-  }, [stories, currentIndex]);
+  }, [stories, currentIndex, pauseAllVideos]);
 
   useEffect(() => {
     if (
@@ -607,29 +665,43 @@ export default function StoriesScreen() {
   );
 
   const blockUser = useCallback(
-    (userId: string, userName?: string) => {
+    (userIdToBlock: string, userName?: string) => {
       Alert.alert('Block User', `Are you sure you want to block ${userName || 'this user'}?`, [
         { text: 'Cancel', style: 'cancel' },
         {
           text: 'Block',
           onPress: async () => {
             await pauseAllVideos();
-            const newStories = stories.filter((s) => s.userId !== userId);
-            bottomSheetModalRef.current?.dismiss();
-            setSelectedUserIdForModal(null);
-            if (newStories.length === 0) return navigateBack();
-            const oldStoryId = stories[currentIndex]?.uniqueStoryId;
-            let newIndex = newStories.findIndex((s) => s.uniqueStoryId === oldStoryId);
-            if (newIndex === -1) newIndex = Math.min(currentIndex, newStories.length - 1);
-            setStories(newStories);
-            setCurrentIndex(newIndex);
-            flatListRef.current?.scrollToIndex({ index: newIndex, animated: false });
+            try {
+              await apiBlockUser(userIdToBlock);
+              updateStoryInState(userIdToBlock, { isBlocked: true });
+              showPopup('User Blocked', `${userName || 'User'} has been blocked.`, 'success');
+            } catch (error: any) {
+              const errorMessage = error.response?.data?.message || 'Could not block the user.';
+              showPopup('Error', errorMessage, 'error');
+              playCurrentVideo();
+            }
           },
           style: 'destructive',
         },
       ]);
     },
-    [stories, currentIndex, pauseAllVideos, navigateBack]
+    [pauseAllVideos, playCurrentVideo, updateStoryInState]
+  );
+
+  const unblockUser = useCallback(
+    async (userIdToUnblock: string, userName?: string) => {
+      try {
+        await apiUnblockUser(userIdToUnblock);
+        updateStoryInState(userIdToUnblock, { isBlocked: false });
+        showPopup('User Unblocked', `${userName || 'User'} has been unblocked.`, 'success');
+        playCurrentVideo();
+      } catch (error: any) {
+        const errorMessage = error.response?.data?.message || 'Could not unblock the user.';
+        showPopup('Error', errorMessage, 'error');
+      }
+    },
+    [playCurrentVideo, updateStoryInState]
   );
 
   const handlePresentModalPress = useCallback((userId: string) => {
@@ -654,42 +726,24 @@ export default function StoriesScreen() {
     []
   );
 
-  // ✅✅✅ CHANGE 1: ROBUST NAVIGATION FUNCTION ✅✅✅
-  // This function is now the single source of truth for programmatic navigation
-  // (auto-play, progress bar taps). It ensures the old video is stopped before
-  // moving to the next one, preventing audio overlap and crashes.
   const goToStory = useCallback(
     (index: number) => {
       if (index < 0 || index >= stories.length || index === currentIndex) return;
-
-      // Explicitly stop the currently playing video. This is the core fix.
       const oldStoryId = stories[currentIndex]?.uniqueStoryId;
       if (oldStoryId && videoRefs.current[oldStoryId]) {
-        videoRefs.current[oldStoryId]?.stopAsync().catch(() => {
-          // Ignore errors, e.g., if video is already stopped
-        });
+        videoRefs.current[oldStoryId]?.stopAsync().catch(() => {});
       }
-
-      // Update the index state immediately and authoritatively.
       setCurrentIndex(index);
       currentVideoProgress.value = 0;
-
-      // Scroll the FlatList to the new story.
       flatListRef.current?.scrollToIndex({ index, animated: true });
     },
-    [stories, currentIndex] // Dependencies are correct
+    [stories, currentIndex]
   );
 
-  // ✅✅✅ CHANGE 2: REFINED VIEW CHANGE HANDLER ✅✅✅
-  // This now reliably handles manual swipes by the user and sets the new index.
-  // It won't conflict with `goToStory` because `goToStory` updates the `currentIndex`
-  // synchronously, making the condition `newVisibleIndex !== currentIndex` false
-  // during programmatic scrolls.
   const onViewableItemsChanged = useRef(({ viewableItems }: any) => {
     if (viewableItems.length > 0) {
       const newVisibleIndex = viewableItems[0].index;
       if (newVisibleIndex !== currentIndex) {
-        // Stop the previous video just in case, providing an extra layer of safety for swipes.
         const oldStoryId = stories[currentIndex]?.uniqueStoryId;
         if (oldStoryId && videoRefs.current[oldStoryId]) {
           videoRefs.current[oldStoryId]?.stopAsync().catch(() => {});
@@ -730,15 +784,12 @@ export default function StoriesScreen() {
           currentVideoProgress={currentVideoProgress}
           videoRef={(ref) => (videoRefs.current[storyId] = ref)}
           onPlaybackStatusUpdate={(status: AVPlaybackStatus) => {
-            if (index !== currentIndex || !status.isLoaded) return;
+            if (index !== currentIndex || !status.isLoaded || item.isBlocked) return;
             if (videoLoadStates[storyId] !== 'loaded')
               runOnJS(setVideoLoadStates)((prev) => ({ ...prev, [storyId]: 'loaded' }));
             if (status.durationMillis)
               currentVideoProgress.value = status.positionMillis / status.durationMillis;
 
-            // ✅✅✅ CHANGE 3: AUTO-PLAY LOGIC UPDATE ✅✅✅
-            // When a video finishes, it now calls our robust `goToStory` function.
-            // This ensures a clean, crash-free transition to the next story.
             if (status.didJustFinish && !status.isLooping) {
               const nextIndex = index + 1;
               if (nextIndex < stories.length) {
@@ -764,6 +815,7 @@ export default function StoriesScreen() {
           onNavigateBack={navigateBack}
           onNavigateToAttraction={() => navigateToAttraction(item.userId)}
           onBlockUser={() => blockUser(item.userId, item.userName)}
+          onUnblockUser={() => unblockUser(item.userId, item.userName)}
           isAttractionDisabled={item.hasExistingAttraction}
         />
       );
@@ -773,10 +825,11 @@ export default function StoriesScreen() {
       stories,
       playableUrls,
       videoLoadStates,
-      goToStory, // Using the new robust function
+      goToStory,
       navigateBack,
       navigateToAttraction,
       blockUser,
+      unblockUser,
       handlePresentModalPress,
       onVideoTap,
     ]

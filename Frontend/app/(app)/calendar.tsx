@@ -30,7 +30,7 @@ import {
 import { CalendarDay } from '../../types/CalendarDay';
 import { UpcomingDate, DateOutcome } from '../../types/Date';
 import { useRouter, useFocusEffect } from 'expo-router';
-import { format, parseISO, isPast } from 'date-fns';
+import { format, parseISO, isPast, isValid } from 'date-fns'; // ✅ NAYA: isValid import karein
 import { Avatar } from 'react-native-paper';
 import { Ionicons } from '@expo/vector-icons';
 
@@ -39,7 +39,7 @@ const LOGO_IMAGE = require('../../assets/brand.png');
 const calcHappyIcon = require('../../assets/calc-happy.png');
 const calcErrorIcon = require('../../assets/calc-error.png');
 
-// --- FeedbackModal component ---
+// --- FeedbackModal component (unchanged) ---
 const FeedbackModal = ({ visible, onClose, onSubmit }) => {
   const [selectedOutcome, setSelectedOutcome] = useState<DateOutcome | null>(null);
   const [notes, setNotes] = useState('');
@@ -147,7 +147,7 @@ const FeedbackModal = ({ visible, onClose, onSubmit }) => {
   );
 };
 
-// --- BubblePopup component ---
+// --- BubblePopup component (unchanged) ---
 const BubblePopup = ({ visible, type, title, message, buttonText, onClose }) => {
   if (!visible) return null;
   const isSuccess = type === 'success';
@@ -174,7 +174,7 @@ const BubblePopup = ({ visible, type, title, message, buttonText, onClose }) => 
   );
 };
 
-// --- Helper for attraction type ---
+// --- Helper for attraction type (unchanged) ---
 const getTypeOfAttraction = (r: number, s: number, f: number) => {
   const interest = r + s + f;
   if (interest === 0) return 'Not Specified';
@@ -191,7 +191,7 @@ const getTypeOfAttraction = (r: number, s: number, f: number) => {
   return 'My Person!';
 };
 
-// --- UpcomingDateItem component ---
+// --- ✅✅✅ UpcomingDateItem component (UPDATED WITH NULL CHECKS) ✅✅✅ ---
 const UpcomingDateItem = ({
   item,
   onPress,
@@ -201,13 +201,23 @@ const UpcomingDateItem = ({
   onPress: Function;
   onRatePress: Function;
 }) => {
+  // ✅ NULL GUARD 1: Agar item null hai ya zaroori data nahi hai, to kuch render na karein.
+  if (!item || !item.date || !item.otherUser) {
+    return null;
+  }
+
   const attractionType = getTypeOfAttraction(
     item.romanticRating,
     item.sexualRating,
     item.friendshipRating
   );
+
+  // ✅ NULL GUARD 2: Date ko safely parse karein
+  const parsedDate = parseISO(item.date);
+  const isValidDate = isValid(parsedDate);
+
   const canGiveFeedback =
-    item.status === 'approved' && isPast(parseISO(item.date)) && !item.myOutcome;
+    isValidDate && item.status === 'approved' && isPast(parsedDate) && !item.myOutcome;
   const hasGivenFeedback = !!item.myOutcome;
 
   return (
@@ -218,7 +228,8 @@ const UpcomingDateItem = ({
           {item.otherUser.firstName}
         </Text>
         <Text style={styles.upcomingItemInfo} numberOfLines={1}>
-          {format(parseISO(item.date), 'MMMM dd, yyyy')} at {item.locationMetadata.name}
+          {isValidDate ? format(parsedDate, 'MMMM dd, yyyy') : 'Invalid Date'} at{' '}
+          {item.locationMetadata?.name || 'N/A'}
         </Text>
         <Text style={styles.upcomingItemTime}>
           {item.time ? format(parseISO(`1970-01-01T${item.time}`), 'p') : 'Time not set'}
@@ -288,32 +299,45 @@ const CalendarHomeScreen = () => {
         getUnreadNotificationsCount(),
       ]);
 
-      const initialDates = upRes.data;
+      // ✅✅✅ BADLAV: API se aaye data ko pehle filter karein ✅✅✅
+      const validDates = (upRes.data || []).filter((item) => item && item.date && item.otherUser);
+
       setUnreadCount(countRes.data.unreadCount);
       setCalendarData(calRes.data);
 
-      if (initialDates.length > 0) {
-        const attractionPromises = initialDates
+      if (validDates.length > 0) {
+        const attractionPromises = validDates
           .filter((d) => d.status === 'approved')
           .map((d) => {
             const from =
               d.userFrom === userProfile.userId ? userProfile.userId : d.otherUser.userId;
             const to = from === userProfile.userId ? d.otherUser.userId : userProfile.userId;
+            // ✅ BADLAV: Safely parse date
+            const parsedDate = parseISO(d.date);
+            if (!isValid(parsedDate)) return Promise.resolve(null); // Invalid date ko skip karein
+
             return getAttractionByUserFromUserToAndDate(
               from,
               to,
-              format(parseISO(d.date), 'yyyy-MM-dd')
+              format(parsedDate, 'yyyy-MM-dd')
             ).catch(() => null);
           });
 
         const attractionResults = await Promise.all(attractionPromises);
 
-        const datesWithAttraction = initialDates.map((d) => {
+        const datesWithAttraction = validDates.map((d) => {
+          const parsedDate = parseISO(d.date);
+          if (!isValid(parsedDate))
+            return { ...d, romanticRating: 0, sexualRating: 0, friendshipRating: 0 };
+
           const attractionResult = attractionResults.find(
             (r) =>
               r &&
-              format(parseISO(r.data.date), 'yyyy-MM-dd') === format(parseISO(d.date), 'yyyy-MM-dd')
+              r.data &&
+              isValid(parseISO(r.data.date)) &&
+              format(parseISO(r.data.date), 'yyyy-MM-dd') === format(parsedDate, 'yyyy-MM-dd')
           );
+
           if (attractionResult?.data) {
             return {
               ...d,
@@ -371,7 +395,7 @@ const CalendarHomeScreen = () => {
   };
 
   const handleDateItemPress = (item: UpcomingDate) => {
-    if (!item.updatedAt)
+    if (!item.updatedAt || !isValid(parseISO(item.updatedAt)))
       return showPopup('Error', 'Cannot verify date status. Please refresh.', 'error');
     try {
       const diff = new Date().getTime() - parseISO(item.updatedAt).getTime();

@@ -1,6 +1,9 @@
+-- File: init.sql
+-- ✅ COMPLETE AND FINAL UPDATED CODE
+
 -- This script will drop existing tables and recreate them to ensure a clean state.
--- ✅ CORRECTED ORDER: First drop tables that have foreign keys, then drop the tables they reference.
-DROP TABLE IF EXISTS date_feedback; -- ✅ Added new table to drop list
+-- CORRECTED ORDER: First drop tables that have foreign keys, then drop the tables they reference.
+DROP TABLE IF EXISTS date_feedback;
 DROP TABLE IF EXISTS user_tutorials;
 DROP TABLE IF EXISTS transactions;
 DROP TABLE IF EXISTS dates;
@@ -9,14 +12,15 @@ DROP TABLE IF EXISTS calendar_day;
 DROP TABLE IF EXISTS notifications;
 DROP TABLE IF EXISTS advertisements;
 DROP TABLE IF EXISTS tutorials;
--- ✅ Drop the 'users' table LAST, because many other tables depend on it.
+DROP TABLE IF EXISTS user_blocks; -- ✅ NAYA: Block table ko drop list mein add kiya
+-- Drop the 'users' table LAST, because many other tables depend on it.
 DROP TABLE IF EXISTS users;
 
 -- Drop custom types if they exist
 DROP TYPE IF EXISTS status_type;
 DROP TYPE IF EXISTS transaction_type;
 DROP TYPE IF EXISTS notification_status;
-DROP TYPE IF EXISTS date_outcome_type; -- ✅ Added new type to drop list
+DROP TYPE IF EXISTS date_outcome_type;
 
 
 -- =================================================================
@@ -45,7 +49,6 @@ DO $$ BEGIN
     END IF;
 END $$;
 
--- ✅ Added the new ENUM type for date feedback
 DO $$ BEGIN
     IF NOT EXISTS (SELECT 1 FROM pg_type WHERE typname = 'date_outcome_type') THEN
         CREATE TYPE date_outcome_type AS ENUM ('amazing', 'stood_up', 'cancelled', 'other');
@@ -149,7 +152,6 @@ CREATE TABLE attractions (
     UNIQUE(user_from, user_to, date)
 );
 
--- ✅ 'dates' table is now clean, without outcome/notes columns.
 CREATE TABLE dates (
     date_id SERIAL PRIMARY KEY,
     date DATE NOT NULL,
@@ -180,6 +182,23 @@ CREATE TABLE transactions (
     FOREIGN KEY (user_id) REFERENCES users(user_id) ON DELETE CASCADE
 );
 
+-- ✅ =================================================================
+-- ✅ NEW TABLE FOR BLOCKING USERS
+-- ✅ =================================================================
+CREATE TABLE user_blocks (
+    blocker_id VARCHAR(255) NOT NULL,
+    blocked_id VARCHAR(255) NOT NULL,
+    created_at TIMESTAMPTZ DEFAULT NOW(),
+    PRIMARY KEY (blocker_id, blocked_id),
+    FOREIGN KEY (blocker_id) REFERENCES users(user_id) ON DELETE CASCADE,
+    FOREIGN KEY (blocked_id) REFERENCES users(user_id) ON DELETE CASCADE
+);
+
+-- Indexes for faster lookups on block checks
+CREATE INDEX idx_user_blocks_blocker_id ON user_blocks(blocker_id);
+CREATE INDEX idx_user_blocks_blocked_id ON user_blocks(blocked_id);
+
+
 -- Step 4: Create tables that depend on both USERS and TUTORIALS
 CREATE TABLE user_tutorials (
     user_tutorial_id SERIAL PRIMARY KEY,
@@ -192,9 +211,6 @@ CREATE TABLE user_tutorials (
     UNIQUE (user_id, tutorial_id)
 );
 
--- ✅ =================================================================
--- ✅ NEW TABLE FOR INDIVIDUAL DATE FEEDBACK
--- ✅ =================================================================
 CREATE TABLE date_feedback (
     feedback_id SERIAL PRIMARY KEY,
     date_id INT NOT NULL,

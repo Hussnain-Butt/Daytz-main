@@ -25,14 +25,11 @@ const mapRowToUser = (row: any): User | null => {
     createdAt: camelizedDbRow.createdAt ? new Date(camelizedDbRow.createdAt) : new Date(),
     updatedAt: camelizedDbRow.updatedAt ? new Date(camelizedDbRow.updatedAt) : new Date(),
     fcm_token: camelizedDbRow.fcmToken,
-    referralSource: camelizedDbRow.referralSource, // ✅ NAYA MAPPING
+    referralSource: camelizedDbRow.referralSource,
   }
 }
 
 class UserRepository {
-  // ... (baaki sabhi functions jaise registerPushToken, getPlayerId, createUser, etc. same rahenge)
-  // updateUser function dynamic hai, isliye usme koi badlav ki zaroorat nahi hai.
-
   async registerPushToken(userId: string, fcmToken: string): Promise<boolean> {
     const client = await pool.connect()
     try {
@@ -182,6 +179,63 @@ class UserRepository {
     const query = `UPDATE users SET tokens = $1, updated_at = NOW() RETURNING user_id;`
     const { rowCount } = await pool.query(query, [amount])
     return rowCount ?? 0
+  }
+
+  // ✅✅✅ --- NAYE FUNCTIONS: BLOCK/UNBLOCK LOGIC --- ✅✅✅
+
+  /**
+   * Creates a block record from a blocker to a blocked user.
+   * @param blockerId The ID of the user initiating the block.
+   * @param blockedId The ID of the user being blocked.
+   * @returns A boolean indicating if the block was successfully created.
+   */
+  async blockUser(blockerId: string, blockedId: string): Promise<boolean> {
+    const query = 'INSERT INTO user_blocks (blocker_id, blocked_id) VALUES ($1, $2);'
+    try {
+      const result = await pool.query(query, [blockerId, blockedId])
+      return (result.rowCount ?? 0) > 0
+    } catch (error: any) {
+      // If the error is due to a duplicate key, it means the user is already blocked.
+      // We can consider this a "successful" state and not re-throw. Or let the service handle it.
+      if (error.code === '23505') {
+        // 23505 is the PostgreSQL error code for unique_violation
+        console.warn(
+          `[UserRepository.blockUser] Attempted to block user ${blockedId} by ${blockerId}, but they are already blocked.`,
+        )
+        return true // Already blocked, so the desired state is achieved.
+      }
+      // Re-throw other errors
+      throw error
+    }
+  }
+
+  /**
+   * Removes a block record.
+   * @param blockerId The ID of the user who initiated the block.
+   * @param blockedId The ID of the user who was blocked.
+   * @returns A boolean indicating if the unblock operation was successful.
+   */
+  async unblockUser(blockerId: string, blockedId: string): Promise<boolean> {
+    const query = 'DELETE FROM user_blocks WHERE blocker_id = $1 AND blocked_id = $2;'
+    const result = await pool.query(query, [blockerId, blockedId])
+    return (result.rowCount ?? 0) > 0
+  }
+
+  /**
+   * Retrieves a list of all users that a specific user has blocked.
+   * @param blockerId The ID of the user whose blocked list we want to retrieve.
+   * @returns An array of User objects.
+   */
+  async getBlockedUsers(blockerId: string): Promise<User[]> {
+    const query = `
+      SELECT u.*
+      FROM users u
+      JOIN user_blocks b ON u.user_id = b.blocked_id
+      WHERE b.blocker_id = $1
+      ORDER BY u.first_name, u.last_name;
+    `
+    const { rows } = await pool.query(query, [blockerId])
+    return rows.map(mapRowToUser).filter((user): user is User => user !== null)
   }
 }
 

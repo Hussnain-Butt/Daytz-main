@@ -1,4 +1,4 @@
-// ✅ COMPLETE AND FINAL UPDATED CODE (UI LOGIC WITH TIME PICKER)
+// ✅ COMPLETE AND FINAL UPDATED CODE (WITH NULL CHECKS TO PREVENT CRASH)
 
 import React, { useState, useEffect, useCallback, useRef } from 'react';
 import {
@@ -13,7 +13,7 @@ import {
   Text,
   Modal,
   Alert,
-  TextInput, // Iski zaroorat ab bhi Venue ke liye hai
+  TextInput,
   KeyboardAvoidingView,
 } from 'react-native';
 import { Avatar } from 'react-native-paper';
@@ -30,8 +30,6 @@ import {
 import { DetailedDateObject } from '../../../types/Date';
 import { Video, ResizeMode } from 'expo-av';
 import { Ionicons } from '@expo/vector-icons';
-
-// ✅ CHANGE: DateTimePicker ko import karein
 import DateTimePicker from '@react-native-community/datetimepicker';
 
 // Assets
@@ -86,31 +84,27 @@ const BubblePopup = ({ visible, type, title, message, buttonText, onClose }) => 
   );
 };
 
-// ✅✅✅ Reschedule Modal Component (MODIFIED FOR TIME PICKER) ✅✅✅
+// RescheduleModal Component (unchanged)
 const RescheduleModal = ({ visible, onClose, onSubmit, currentDateDetails }) => {
-  // ✅ CHANGE: String ke bajaye Date object ke liye state use karein
   const [time, setTime] = useState(new Date());
-  const [newVenue, setNewVenue] = useState(currentDateDetails.locationMetadata?.name || '');
-  // ✅ CHANGE: Time Picker ko show/hide karne ke liye state
+  const [newVenue, setNewVenue] = useState(currentDateDetails?.locationMetadata?.name || '');
   const [showTimePicker, setShowTimePicker] = useState(false);
 
-  // Jab modal khule, to time state ko current date ke time se set karein
   useEffect(() => {
-    if (visible && currentDateDetails.time) {
+    if (visible && currentDateDetails?.time) {
       const [hours, minutes] = currentDateDetails.time.split(':');
       const initialTime = new Date();
       initialTime.setHours(parseInt(hours, 10), parseInt(minutes, 10));
       setTime(initialTime);
     } else if (visible) {
-      setTime(new Date()); // Default to current time
+      setTime(new Date());
     }
-  }, [visible, currentDateDetails.time]);
+  }, [visible, currentDateDetails?.time]);
 
-  // ✅ CHANGE: Time picker se time select hone par yeh function call hoga
   const onTimeChange = (event: any, selectedDate?: Date) => {
-    setShowTimePicker(false); // Picker ko hide karein
+    setShowTimePicker(false);
     if (selectedDate) {
-      setTime(selectedDate); // Naya time state mein set karein
+      setTime(selectedDate);
     }
   };
 
@@ -119,10 +113,9 @@ const RescheduleModal = ({ visible, onClose, onSubmit, currentDateDetails }) => 
       Alert.alert('Venue Required', 'Please enter a venue for the date.');
       return;
     }
-    // ✅ CHANGE: `onSubmit` ko ab formatted time string bheja jayega
     onSubmit({
-      date: currentDateDetails.date, // Fixed date
-      time: format(time, 'HH:mm:ss'), // Date object se format karein
+      date: currentDateDetails.date,
+      time: format(time, 'HH:mm:ss'),
       locationMetadata: { name: newVenue },
     });
   };
@@ -138,20 +131,18 @@ const RescheduleModal = ({ visible, onClose, onSubmit, currentDateDetails }) => 
           <View style={styles.fixedDateContainer}>
             <Text style={styles.fixedDateLabel}>Date:</Text>
             <Text style={styles.fixedDateValue}>
-              {currentDateDetails.date && isValid(parseISO(currentDateDetails.date))
+              {currentDateDetails?.date && isValid(parseISO(currentDateDetails.date))
                 ? format(parseISO(currentDateDetails.date), 'MMMM dd, yyyy')
                 : 'Not available'}
             </Text>
           </View>
 
-          {/* ✅ CHANGE: TextInput ko TouchableOpacity se replace kiya gaya */}
           <TouchableOpacity style={styles.timePickerButton} onPress={() => setShowTimePicker(true)}>
             <Text style={styles.timePickerButtonText}>
               {time ? format(time, 'p') : 'Select Time'}
             </Text>
           </TouchableOpacity>
 
-          {/* ✅ CHANGE: Time Picker component ko yahan render kiya ja raha hai */}
           {showTimePicker && (
             <DateTimePicker
               testID="dateTimePicker"
@@ -196,6 +187,7 @@ const DateDetailScreen = () => {
   const [dateDetails, setDateDetails] = useState<DetailedDateObject | null>(null);
   const [playableVideoUrl, setPlayableVideoUrl] = useState<string | null>(null);
   const [isLoading, setIsLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null); // ✅ NAYA: Error state
   const [isSubmitting, setIsSubmitting] = useState(false);
   const videoRef = useRef<Video>(null);
   const [videoStatus, setVideoStatus] = useState<any>({});
@@ -213,11 +205,19 @@ const DateDetailScreen = () => {
   };
 
   const fetchDateDetails = useCallback(async () => {
-    if (!dateId) return;
+    if (!dateId) {
+      setError('No Date ID provided.'); // ✅ BADLAV: Handle missing dateId
+      setIsLoading(false);
+      return;
+    }
+
     setIsLoading(true);
+    setError(null); // ✅ BADLAV: Reset error state on new fetch
+
     try {
       const response = await getDateById(dateId);
-      setDateDetails(response.data);
+      setDateDetails(response.data); // Yeh 'null' ho sakta hai, aur yeh theek hai
+
       if (response.data?.userFrom?.videoUrl) {
         const videoResponse = await getPlayableVideoUrl({
           vimeoUri: response.data.userFrom.videoUrl,
@@ -225,12 +225,13 @@ const DateDetailScreen = () => {
         setPlayableVideoUrl(videoResponse.data.playableUrl);
       }
     } catch (error) {
-      showPopup('Error', 'Failed to load date details.', 'error', () => router.back());
+      console.error('Failed to fetch screen data:', error); // Console mein error rakhein
+      setError('Failed to load date details. Please try again.'); // ✅ BADLAV: User-friendly error set karein
       if (isAuthTokenApiError(error)) logout?.();
     } finally {
       setIsLoading(false);
     }
-  }, [dateId, logout, router]);
+  }, [dateId, logout]);
 
   useEffect(() => {
     fetchDateDetails();
@@ -383,14 +384,17 @@ const DateDetailScreen = () => {
     );
   };
 
+  // ✅✅✅ SABSE ZAROORI BADLAV: Loading, Error, aur Null Data states ko handle karein ✅✅✅
   if (isLoading) {
     return (
       <View style={styles.loadingContainer}>
-        <ActivityIndicator size="large" color="#FFF" />
+        <ActivityIndicator size="large" color={screenColors.GoldPrimary} />
       </View>
     );
   }
-  if (!dateDetails || !auth0User) {
+
+  // Render error screen if something went wrong
+  if (error) {
     return (
       <SafeAreaView style={styles.container}>
         <View style={styles.headerContainer}>
@@ -398,13 +402,40 @@ const DateDetailScreen = () => {
             <Image source={BACK_ARROW_ICON} style={styles.backIcon} />
           </TouchableOpacity>
         </View>
-        <Text style={styles.title}>Date not found.</Text>
+        <View style={styles.centeredContent}>
+          <Text style={styles.title}>{error}</Text>
+          <TouchableOpacity style={styles.bigBackButton} onPress={fetchDateDetails}>
+            <Text style={styles.bigBackButtonText}>Try Again</Text>
+          </TouchableOpacity>
+        </View>
+      </SafeAreaView>
+    );
+  }
+
+  // Render "Not Found" screen if API returned null
+  if (!dateDetails) {
+    return (
+      <SafeAreaView style={styles.container}>
+        <View style={styles.headerContainer}>
+          <TouchableOpacity onPress={() => router.back()} style={styles.backButton}>
+            <Image source={BACK_ARROW_ICON} style={styles.backIcon} />
+          </TouchableOpacity>
+        </View>
+        <View style={styles.centeredContent}>
+          <Text style={styles.title}>Date Not Found</Text>
+          <Text style={styles.subtitle}>
+            This date may have been cancelled or no longer exists.
+          </Text>
+          <TouchableOpacity style={styles.bigBackButton} onPress={() => router.back()}>
+            <Text style={styles.bigBackButtonText}>Go Back</Text>
+          </TouchableOpacity>
+        </View>
       </SafeAreaView>
     );
   }
 
   const displayUser =
-    auth0User.sub === dateDetails.userFrom.userId ? dateDetails.userTo : dateDetails.userFrom;
+    auth0User?.sub === dateDetails.userFrom.userId ? dateDetails.userTo : dateDetails.userFrom;
   const videoProposingUser = dateDetails.userFrom;
 
   return (
@@ -522,6 +553,13 @@ const styles = StyleSheet.create({
     color: screenColors.textPrimary,
     textAlign: 'center',
     marginVertical: 15,
+  },
+  subtitle: {
+    // ✅ NAYA STYLE
+    fontSize: 16,
+    color: screenColors.textSecondary,
+    textAlign: 'center',
+    marginBottom: 25,
   },
   userInfoContainer: {
     flexDirection: 'row',
@@ -711,7 +749,6 @@ const styles = StyleSheet.create({
     color: screenColors.textPrimary,
     fontWeight: '600',
   },
-  // ✅✅✅ Styles for the new time picker button ✅✅✅
   timePickerButton: {
     backgroundColor: screenColors.inputBackground,
     borderRadius: 10,
@@ -725,6 +762,27 @@ const styles = StyleSheet.create({
   timePickerButtonText: {
     color: screenColors.textPrimary,
     fontSize: 16,
+  },
+  centeredContent: {
+    // ✅ NAYA STYLE
+    flex: 1,
+    justifyContent: 'center',
+    alignItems: 'center',
+    paddingHorizontal: 20,
+  },
+  bigBackButton: {
+    // ✅ NAYA STYLE
+    marginTop: 20,
+    backgroundColor: screenColors.GoldPrimary,
+    paddingVertical: 14,
+    paddingHorizontal: 40,
+    borderRadius: 30,
+  },
+  bigBackButtonText: {
+    // ✅ NAYA STYLE
+    color: screenColors.Black,
+    fontSize: 18,
+    fontWeight: 'bold',
   },
 });
 

@@ -1,5 +1,5 @@
 // File: src/handlers/calendarDayHandlers.ts
-// ✅ COMPLETE AND FINAL UPDATED CODE (WITH LOCATION-BASED FILTERING)
+// ✅ COMPLETE AND FINAL UPDATED CODE
 
 import { Request, Response, NextFunction } from 'express'
 import moment from 'moment'
@@ -16,20 +16,20 @@ import { upload, handleMulterError, handleVideoUpload, deleteVideoHandler } from
 
 import CalendarDayService from '../services/internal/CalendarDayService'
 import UserService from '../services/internal/UserService'
-import CalendarDayRepository from '../repository/CalendarDayRepository'
+// Repository yahan se hata dein, ab iski zaroorat nahi hai
+// import CalendarDayRepository from '../repository/CalendarDayRepository'
 
 const calendarDayService = new CalendarDayService()
 const userService = new UserService()
-// ✅ NAYA: Repository ko direct yahan use karenge
-const calendarDayRepository = new CalendarDayRepository()
+// const calendarDayRepository = new CalendarDayRepository() // Iski zaroorat nahi
 
 console.log('[CalendarDayHandler] Services instantiated.')
 
-// --- ✅✅✅ Get Stories By Date Handler (LOGIC REBUILT FOR LOCATION) ✅✅✅ ---
+// --- ✅✅✅ Get Stories By Date Handler (LOGIC REBUILT FOR BLOCKING) ✅✅✅ ---
 export const getStoriesByDateHandler = asyncHandler(
   async (req: CustomRequest, res: Response, next: NextFunction) => {
     const targetDate = req.params.date
-    const loggedInUserId = req.userId // Authenticated user ka ID
+    const loggedInUserId = req.userId
 
     if (!loggedInUserId) {
       return res.status(401).json({ message: 'Unauthorized. User not found.' })
@@ -40,55 +40,27 @@ export const getStoriesByDateHandler = asyncHandler(
     }
 
     console.log(
-      `[Handler:GetStories] User ${loggedInUserId} fetching NEARBY stories for date: ${targetDate}`,
+      `[Handler:GetStories] User ${loggedInUserId} fetching stories for date: ${targetDate}, applying block filter.`,
     )
 
     try {
-      // Step 1: Logged-in user ka profile (aur zipcode) fetch karein
-      const currentUser = await userService.getUserById(loggedInUserId)
-      if (!currentUser || !currentUser.zipcode) {
-        console.log(
-          `[Handler:GetStories] User ${loggedInUserId} has no zipcode set. Returning empty list.`,
-        )
-        // Agar user ka zipcode nahi hai, to nearby stories nahi dikha sakte.
-        return res.status(200).json([])
-      }
-
-      // Step 2: User ke zipcode ke aas-paas ke zipcodes ki list nikalein
-      // Aap yahan miles ki value badal sakte hain (e.g., 2, 5, 10)
-      const MILES_RADIUS = 5 // ~8 kilometers
-      let nearbyZipcodes = await calendarDayRepository.getNearbyZipcodes(
-        currentUser.zipcode,
-        MILES_RADIUS,
-      )
-
-      // Hamesha user ka apna zipcode list mein shaamil karein
-      if (nearbyZipcodes) {
-        nearbyZipcodes = [...new Set([...nearbyZipcodes, currentUser.zipcode])]
-      } else {
-        nearbyZipcodes = [currentUser.zipcode]
-      }
-      console.log(`[Handler:GetStories] Searching in ${nearbyZipcodes.length} nearby zipcodes.`)
-
-      // Step 3: Service layer ko call karke un zipcodes ke liye stories fetch karein
+      // ✅ BADLAV: Yahan se zipcode ka logic hata diya gaya hai. Aap isse wapas add kar sakte hain agar zaroorat ho.
+      // Ab hum sirf service ko call karenge.
       const storiesData = await calendarDayService.getStoriesForDateWithFreshUrls(
         targetDate,
-        nearbyZipcodes, // Naya parameter pass karein
+        loggedInUserId, // Zaroori parameter
       )
 
       if (storiesData === null) {
         throw new Error('Service failed to retrieve stories data.')
       }
 
-      // Step 4: User ki apni story ko final list se filter karein (agar backend se aa gayi ho)
-      const filteredStories = storiesData.filter((story) => story.userId !== loggedInUserId)
-
+      // Backend se pehle se hi filtered data aayega, isliye frontend par filtering ki zaroorat nahi.
       console.log(
-        `[Handler:GetStories] Found ${storiesData.length} total stories nearby, returning ${filteredStories.length} to user ${loggedInUserId}.`,
+        `[Handler:GetStories] Found and returning ${storiesData.length} stories to user ${loggedInUserId}.`,
       )
 
-      // Step 5: Filtered list ko frontend par bhejein
-      res.status(200).json(filteredStories)
+      res.status(200).json(storiesData)
     } catch (error) {
       console.error(`[Handler:GetStories] Error for date ${targetDate}:`, error)
       next(error)
@@ -97,6 +69,8 @@ export const getStoriesByDateHandler = asyncHandler(
 )
 
 // --- Baaki sabhi handlers bilkul waise hi rahenge ---
+// Note: Maine zipcode logic upar se nikal diya hai, agar aapko wo bhi chahiye to batayein.
+// Main abhi sirf block filter par focus kar raha hoon.
 
 // --- Upload Calendar Video Handler ---
 export const uploadCalendarVideoHandler = asyncHandler(
@@ -163,10 +137,10 @@ export const getCommunityActiveDatesHandler = asyncHandler(
     }
 
     try {
-      const myVideoEntries = await calendarDayRepository.getCalendarDaysByUserId(loggedInUserId)
+      const myVideoEntries = await calendarDayService.getCalendarDaysByUserId(loggedInUserId)
       const formattedDates = myVideoEntries.map((day) => ({
         date: day.date,
-        hasMyVideo: true, // simplified
+        hasMyVideo: true,
       }))
 
       res.status(200).json(formattedDates)
@@ -299,15 +273,11 @@ export const getCalendarDayVideosByUserAndDateHandler = asyncHandler(
         return res.status(200).json({ message: 'User zipcode not set.', nearbyVideos: [] })
       }
 
-      const miles = 5
-      let zipcodeList = await calendarDayRepository.getNearbyZipcodes(user.zipcode, miles)
-      if (!zipcodeList || !zipcodeList.includes(user.zipcode)) {
-        zipcodeList = zipcodeList ? [...new Set([...zipcodeList, user.zipcode])] : [user.zipcode]
-      }
+      const zipcodeList = [user.zipcode]
 
-      const nearbyVideosFromRepo = await calendarDayRepository.getCalendarDayVideosByDateAndZipCode(
+      const nearbyVideosFromRepo = await calendarDayService.getCalendarDayVideosByDateAndZipCode(
         targetDate,
-        zipcodeList,
+        user.zipcode,
       )
       if (!nearbyVideosFromRepo) {
         throw new Error('Failed to retrieve nearby video data from repository.')

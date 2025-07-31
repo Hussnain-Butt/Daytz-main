@@ -22,23 +22,30 @@ class CalendarDayService {
     console.log('[CalendarDayService] Initialized.')
   }
 
-  // ✅ BADLAV: Yeh function ab optional zipcodes ki list accept karega
+  // ✅ BADLAV: Yeh function ab loggedInUserId accept karega
   async getStoriesForDateWithFreshUrls(
     date: string,
-    zipcodeList?: string[], // <-- Naya optional parameter
+    loggedInUserId: string, // Naya zaroori parameter
+    zipcodeList?: string[], // Optional parameter
   ): Promise<StoryQueryResultWithUrl[] | null> {
     let storiesFromRepo
     // Agar zipcodeList di gayi hai, to naya location-based function use karein
     if (zipcodeList && zipcodeList.length > 0) {
       console.log(`[Service] Fetching stories for date ${date} in specific zipcodes.`)
+      // ✅ BADLAV: loggedInUserId ko pass karein
       storiesFromRepo = await this.calendarDayRepository.findStoriesByDateAndZipcodes(
         date,
         zipcodeList,
+        loggedInUserId,
       )
     } else {
       // Fallback: Agar koi zipcode nahi diya, to purana function use karein (sabke liye)
       console.log(`[Service] Fetching all stories for date ${date} (no zipcode filter).`)
-      storiesFromRepo = await this.calendarDayRepository.findStoriesByDateWithUserDetails(date)
+      // ✅ BADLAV: loggedInUserId ko pass karein
+      storiesFromRepo = await this.calendarDayRepository.findStoriesByDateWithUserDetails(
+        date,
+        loggedInUserId,
+      )
     }
 
     if (storiesFromRepo === null) {
@@ -93,8 +100,7 @@ class CalendarDayService {
     date: string,
     zipcode: string,
   ): Promise<NearbyVideoData[] | null> {
-    const miles = 5
-    const zipcodeList = await this.calendarDayRepository.getNearbyZipcodes(zipcode, miles)
+    const zipcodeList = [zipcode]
     if (!zipcodeList || zipcodeList.length === 0) return []
     return this.calendarDayRepository.getCalendarDayVideosByDateAndZipCode(date, zipcodeList)
   }

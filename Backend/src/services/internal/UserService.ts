@@ -20,30 +20,49 @@ class UserService {
   async updateUser(userId: string, updateData: UpdateUserPayload): Promise<User | null> {
     console.log(`[UserService.updateUser] Updating user ${userId} with:`, updateData)
 
-    // Agar update data khali hai, to kuch na karein
     if (Object.keys(updateData).length === 0) {
       return this.getUserById(userId)
     }
 
-    // Bonus coins ka logic
     if (updateData.referralSource) {
       const currentUser = await this.userRepository.getUserById(userId)
-
-      // Bonus sirf tab dein jab user maujood ho, usne pehle referral source nahi diya ho,
-      // aur naya referral source khali na ho.
       if (currentUser && !currentUser.referralSource && updateData.referralSource.trim() !== '') {
         console.log(
           `[UserService.updateUser] User ${userId} provided a referral source for the first time. Awarding bonus.`,
         )
-        // Current tokens mein bonus add karein
         const newTotalTokens = (currentUser.tokens || 0) + REFERRAL_BONUS_COINS
-        updateData.tokens = newTotalTokens // updateData object ko modify karein
+        updateData.tokens = newTotalTokens
         console.log(`[UserService.updateUser] New token balance for ${userId}: ${newTotalTokens}`)
       }
     }
 
     return this.userRepository.updateUser(userId, updateData)
   }
+
+  // ✅✅✅ --- NAYA LOGIC: BLOCK/UNBLOCK --- ✅✅✅
+  async blockUser(blockerId: string, blockedId: string): Promise<boolean> {
+    console.log(`[UserService.blockUser] User ${blockerId} attempting to block ${blockedId}`)
+    if (blockerId === blockedId) {
+      throw new Error('You cannot block yourself.')
+    }
+    // Check if users exist before blocking
+    const blockedUserExists = await this.userRepository.getUserById(blockedId)
+    if (!blockedUserExists) {
+      throw new Error('User to be blocked not found.')
+    }
+    return this.userRepository.blockUser(blockerId, blockedId)
+  }
+
+  async unblockUser(blockerId: string, blockedId: string): Promise<boolean> {
+    console.log(`[UserService.unblockUser] User ${blockerId} attempting to unblock ${blockedId}`)
+    return this.userRepository.unblockUser(blockerId, blockedId)
+  }
+
+  async getBlockedUsers(blockerId: string): Promise<User[]> {
+    console.log(`[UserService.getBlockedUsers] Fetching blocked users for ${blockerId}`)
+    return this.userRepository.getBlockedUsers(blockerId)
+  }
+  // ✅✅✅ --- END OF NAYA LOGIC --- ✅✅✅
 
   // ... (Baaki sabhi functions jaise spendTokensForUser, createUser etc. same rahenge)
 
@@ -86,7 +105,6 @@ class UserService {
       if (!userData.email) {
         throw new Error('Email is required to create a user.')
       }
-      // New user gets 100 coins by default. Bonus is added later on first profile save.
       const payloadForRepo = {
         userId: userData.userId,
         email: userData.email,

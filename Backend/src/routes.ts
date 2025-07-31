@@ -47,6 +47,23 @@ router.post(
   asyncHandler(userHandler.registerPushTokenHandler),
 )
 
+// Block a user
+router.post('/users/block', ...protectedRouteMiddleware, asyncHandler(userHandler.blockUserHandler))
+
+// Unblock a user
+router.post(
+  '/users/unblock',
+  ...protectedRouteMiddleware,
+  asyncHandler(userHandler.unblockUserHandler),
+)
+
+// Get a list of users I have blocked (for a settings page)
+router.get(
+  '/users/me/blocked',
+  ...protectedReadMiddleware,
+  asyncHandler(userHandler.getBlockedUsersHandler),
+)
+
 // --- DATE (PLANNED DATE/EVENT) ROUTES ---
 router.post('/date', ...protectedRouteMiddleware, asyncHandler(dateHandlers.createDateHandler))
 router.get(

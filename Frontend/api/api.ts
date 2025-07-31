@@ -156,6 +156,36 @@ export const getUserTokenBalance = async (): Promise<AxiosResponse<{ tokenBalanc
   }
 };
 
+// ✅✅✅ --- NAYE FUNCTIONS: BLOCK/UNBLOCK --- ✅✅✅
+export const blockUser = async (
+  userIdToBlock: string
+): Promise<AxiosResponse<{ message: string }>> => {
+  try {
+    return await apiClient.post('/users/block', { userId: userIdToBlock });
+  } catch (e) {
+    throw e;
+  }
+};
+
+export const unblockUser = async (
+  userIdToUnblock: string
+): Promise<AxiosResponse<{ message: string }>> => {
+  try {
+    return await apiClient.post('/users/unblock', { userId: userIdToUnblock });
+  } catch (e) {
+    throw e;
+  }
+};
+
+export const getMyBlockedUsers = async (): Promise<AxiosResponse<User[]>> => {
+  try {
+    return await apiClient.get<User[]>('/users/me/blocked');
+  } catch (e) {
+    throw e;
+  }
+};
+// ✅✅✅ --- END OF NAYE FUNCTIONS --- ✅✅✅
+
 export const purchaseTokens = async (payload: {
   tokenAmount: number;
   description: string;
