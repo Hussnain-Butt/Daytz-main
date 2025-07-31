@@ -24,7 +24,7 @@ const PORT = process.env.PORT || 3000
 const allowedOrigins = [
   'https://2c4d-2400-adc5-173-bd00-5a6-36ef-c7d6-f6af.ngrok-free.app', // your ngrok
   'http://localhost:8081', // Expo web or other local client
-  'https://backend-production-7442.up.railway.app', // Your specific local IP for mobile dev
+  'http://192.168.1.9:3000', // Your specific local IP for mobile dev
   // Development ke liye aapke local IP ko bhi add karna accha rehta hai
   'http://192.168.1.6:8081', // Example: Frontend running on this IP
 ]

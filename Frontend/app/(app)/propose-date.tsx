@@ -17,6 +17,7 @@ import {
   KeyboardAvoidingView,
   Modal,
   FlatList,
+  TouchableWithoutFeedback, // Import TouchableWithoutFeedback
 } from 'react-native';
 import { Text, Avatar } from 'react-native-paper';
 import { format, parseISO, isValid } from 'date-fns';
@@ -39,7 +40,7 @@ import { useUserStore } from '../../store/useUserStore';
 const BACK_ARROW_ICON = require('../../assets/back_arrow_icon.png');
 const BRAND_LOGO = require('../../assets/brand.png');
 const calcHappyIcon = require('../../assets/calc-happy.png');
-const calcErrorIcon = require('../../assets/calc-error.png');
+const calcErrorIcon = require('../../assets/calc-error.png'); // Corrected path
 const screenColors = {
   background: '#121212',
   textPrimary: '#FFFFFF',
@@ -79,6 +80,9 @@ const BubblePopup = ({ visible, type, title, message, buttonText, onClose }) => 
   );
 };
 
+// Google Places API Key
+const GOOGLE_PLACES_API_KEY = 'AIzaSyBwOm3P6Ji4Bleg3bLsT2TiumWAQF57uBM'; // Updated API Key
+
 const ProposeDateScreen = () => {
   const router = useRouter();
   const params = useLocalSearchParams<{ userToId: string; dateForProposal: string }>();
@@ -102,6 +106,15 @@ const ProposeDateScreen = () => {
     message: '',
     onCloseCallback: undefined as (() => void) | undefined,
   });
+
+  // New state for Google Places Autocomplete
+  const [predictions, setPredictions] = useState<any[]>([]);
+  const [showPredictions, setShowPredictions] = useState(false);
+  const debounceTimeoutRef = useRef<NodeJS.Timeout | null>(null);
+
+  // Ref for the TextInput to get its layout for modal positioning
+  const venueInputRef = useRef<TextInput>(null);
+  const [venueInputLayout, setVenueInputLayout] = useState({ x: 0, y: 0, width: 0, height: 0 });
 
   const showPopup = (
     title: string,
@@ -146,13 +159,9 @@ const ProposeDateScreen = () => {
 
         if (dateResponse.data) setExistingDate(dateResponse.data);
 
-        // ✅✅✅ --- THIS IS THE FIX --- ✅✅✅
-        // Hum ab `result` ko check nahi karenge. Agar notification aayi hai, to hum trust
-        // karenge ki match hai. Hum sirf yeh check karenge ki attraction ka data mila ya nahi.
         if (!attractionResponse.data) {
           throw new Error('Could not load your attraction details to create a proposal.');
         }
-        // ✅✅✅ --- END OF FIX --- ✅✅✅
         setMyAttraction(attractionResponse.data);
       } catch (err: any) {
         console.error('Failed to fetch initial data for propose date screen:', err);
@@ -166,6 +175,52 @@ const ProposeDateScreen = () => {
     fetchInitialData();
   }, [userToId, dateForProposal, authUser?.sub, logout]);
 
+  // Debounced function for fetching autocomplete predictions
+  const fetchPredictions = useCallback((input: string) => {
+    if (debounceTimeoutRef.current) {
+      clearTimeout(debounceTimeoutRef.current);
+    }
+
+    debounceTimeoutRef.current = setTimeout(async () => {
+      if (input.length < 3) {
+        setPredictions([]);
+        // Only hide if input is too short, otherwise keep predictions visible
+        // setShowPredictions(false); // Removed: Avoid premature hiding
+        return;
+      }
+
+      try {
+        const response = await fetch(
+          `https://maps.googleapis.com/maps/api/place/autocomplete/json?input=${input}&key=${GOOGLE_PLACES_API_KEY}`
+        );
+        const json = await response.json();
+        if (json.predictions && json.predictions.length > 0) {
+          setPredictions(json.predictions);
+          setShowPredictions(true); // Explicitly show if predictions are found
+        } else {
+          setPredictions([]);
+          setShowPredictions(false); // Hide if no predictions
+        }
+      } catch (e) {
+        console.error('Error fetching place predictions:', e);
+        setPredictions([]);
+        setShowPredictions(false);
+      }
+    }, 300); // Debounce for 300ms
+  }, []);
+
+  const handleVenueChangeText = (text: string) => {
+    setVenueName(text);
+    fetchPredictions(text);
+  };
+
+  const handlePredictionPress = (prediction: any) => {
+    setVenueName(prediction.description);
+    setPredictions([]); // Clear predictions
+    setShowPredictions(false); // Hide prediction list after selection
+    Keyboard.dismiss(); // Dismiss keyboard after selection
+  };
+
   const handleTimeConfirm = (time: Date) => {
     setSelectedTime(time);
     setShowTimePicker(false);
@@ -173,6 +228,8 @@ const ProposeDateScreen = () => {
 
   const handleProposeDate = useCallback(async () => {
     Keyboard.dismiss();
+    setShowPredictions(false); // Ensure predictions are hidden on submission attempt
+
     if (!authUser?.sub || !userToId || !selectedEventDate || !myAttraction) {
       showPopup('Error', 'Essential information is missing or match not found.', 'error');
       return;
@@ -187,7 +244,7 @@ const ProposeDateScreen = () => {
       userTo: userToId,
       date: format(selectedEventDate, 'yyyy-MM-dd'),
       time: format(selectedTime, 'HH:mm:ss'),
-      locationMetadata: { name: venueName.trim(), address: '' },
+      locationMetadata: { name: venueName.trim(), address: '' }, // Venue name now comes from autocomplete
       romanticRating: myAttraction.romanticRating || 0,
       sexualRating: myAttraction.sexualRating || 0,
       friendshipRating: myAttraction.friendshipRating || 0,
@@ -241,6 +298,20 @@ const ProposeDateScreen = () => {
     );
   };
 
+  // Effect to hide predictions when keyboard is dismissed OR when modal itself closes
+  useEffect(() => {
+    const keyboardDidHideListener = Keyboard.addListener('keyboardDidHide', () => {
+      // Only hide predictions if the user isn't actively interacting with the modal
+      // This is a common point of contention. We'll rely more on onFocus and onPredictionPress
+      // to control setShowPredictions.
+      // setShowPredictions(false); // Re-evaluating this based on persistent issue
+    });
+
+    return () => {
+      keyboardDidHideListener.remove();
+    };
+  }, []);
+
   // --- JSX & Styles (No changes from here) ---
   if (isLoading) {
     return (
@@ -267,8 +338,16 @@ const ProposeDateScreen = () => {
         style={{ flex: 1 }}>
         <ScrollView
           contentContainerStyle={styles.scrollContentContainer}
+          // IMPORTANT: keyboardShouldPersistTaps="handled" is correctly placed here.
+          // This allows the keyboard to stay open even when tapping outside the TextInput,
+          // which is essential for interacting with the prediction list.
           keyboardShouldPersistTaps="handled"
-          showsVerticalScrollIndicator={false}>
+          showsVerticalScrollIndicator={false}
+          // The pointerEvents property on the ScrollView is crucial.
+          // When predictions are shown (modal is active), this ensures touch events
+          // are directed to the modal overlay, not the underlying ScrollView content.
+          // This prevents accidental blurring of the TextInput or interaction with other elements.
+          pointerEvents={showPredictions ? 'none' : 'auto'}>
           <View style={styles.innerContainer}>
             <View style={styles.headerContainer}>
               <TouchableOpacity onPress={() => router.back()} style={styles.backButton}>
@@ -298,11 +377,26 @@ const ProposeDateScreen = () => {
               <View style={styles.inputContainer}>
                 <Text style={styles.inputLabel}>Venue</Text>
                 <TextInput
+                  ref={venueInputRef} // Assign the ref
                   style={styles.textInput}
                   placeholder="e.g., boo Club, East Anaheim Street..."
                   placeholderTextColor={screenColors.inputPlaceholder}
                   value={venueName}
-                  onChangeText={setVenueName}
+                  onChangeText={handleVenueChangeText}
+                  onFocus={() => {
+                    // When the TextInput gains focus, and there's enough text for predictions, show them.
+                    // This covers cases where the user might tap back into the field.
+                    if (venueName.length >= 3) {
+                      setShowPredictions(true);
+                    }
+                  }}
+                  // Removed `onBlur` from here. The modal overlay handles dismissal.
+                  onLayout={() => {
+                    // Measure the TextInput's position and size relative to the screen
+                    venueInputRef.current?.measureInWindow((fx, fy, fwidth, fheight) => {
+                      setVenueInputLayout({ x: fx, y: fy, width: fwidth, height: fheight });
+                    });
+                  }}
                 />
               </View>
               <View style={styles.inputContainer}>
@@ -322,6 +416,56 @@ const ProposeDateScreen = () => {
         </ScrollView>
         <View style={styles.footer}>{renderFooter()}</View>
       </KeyboardAvoidingView>
+
+      {/* Modal for Autocomplete Predictions */}
+      <Modal
+        transparent
+        visible={showPredictions && predictions.length > 0} // Only show modal if there are predictions
+        onRequestClose={() => setShowPredictions(false)} // Android hardware back button
+        animationType="fade">
+        {/* This TouchableOpacity serves as the overlay. Tapping anywhere on it (outside the prediction list)
+            will dismiss the predictions. This is the primary way to hide the predictions manually. */}
+        <TouchableOpacity
+          style={styles.modalOverlay}
+          activeOpacity={1} // Prevents visual feedback on tap of the transparent overlay
+          onPress={() => setShowPredictions(false)} // Dismiss predictions
+        >
+          {/* TouchableWithoutFeedback wraps the FlatList to ensure that taps *within* the FlatList
+              (i.e., on a prediction item) do NOT propagate up to the modalOverlay and dismiss the modal prematurely. */}
+          <TouchableWithoutFeedback
+            onPress={() => {
+              /* Do nothing, just stop propagation so parent TouchableOpacity doesn't fire */
+            }}>
+            <View
+              style={[
+                styles.predictionsModalContainer,
+                {
+                  top: venueInputLayout.y + venueInputLayout.height,
+                  left: venueInputLayout.x,
+                  width: venueInputLayout.width,
+                },
+              ]}>
+              <FlatList
+                data={predictions}
+                keyExtractor={(item) => item.place_id}
+                renderItem={({ item }) => (
+                  <TouchableOpacity
+                    style={styles.predictionItem}
+                    onPress={() => handlePredictionPress(item)} // This will also hide predictions
+                  >
+                    <Text style={styles.predictionText}>{item.description}</Text>
+                  </TouchableOpacity>
+                )}
+                style={styles.predictionsListModal}
+                // VERY IMPORTANT: Allows taps on list items to register WITHOUT dismissing the keyboard.
+                // This is crucial for smooth selection.
+                keyboardShouldPersistTaps="always"
+              />
+            </View>
+          </TouchableWithoutFeedback>
+        </TouchableOpacity>
+      </Modal>
+
       <DateTimePickerModal
         isVisible={showTimePicker}
         mode="time"
@@ -486,6 +630,32 @@ const styles = StyleSheet.create({
   successButton: { backgroundColor: screenColors.GoldPrimary },
   errorButtonText: { color: screenColors.White, fontSize: 15, fontWeight: 'bold' },
   successButtonText: { color: screenColors.Black, fontSize: 15, fontWeight: 'bold' },
+  // New styles for modal predictions
+  modalOverlay: {
+    flex: 1,
+    backgroundColor: 'transparent', // The overlay itself is transparent
+  },
+  predictionsModalContainer: {
+    position: 'absolute',
+    backgroundColor: screenColors.inputBackground,
+    borderRadius: 12,
+    maxHeight: 200, // Limit height for scrollability
+    borderWidth: 1,
+    borderColor: '#48484A',
+    overflow: 'hidden', // Ensures content respects border radius
+  },
+  predictionsListModal: {
+    flexGrow: 1, // Allows FlatList to grow within its container
+  },
+  predictionItem: {
+    padding: 16,
+    borderBottomWidth: 1,
+    borderBottomColor: '#3A3A3C',
+  },
+  predictionText: {
+    color: screenColors.textPrimary,
+    fontSize: 16,
+  },
 });
 
 export default ProposeDateScreen;
