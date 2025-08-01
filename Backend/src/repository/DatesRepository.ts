@@ -50,17 +50,18 @@ class DatesRepository {
     return newDate
   }
 
+  // ✅ BADLAV YAHAN HAI: `SELECT` ke baad wale invisible character ko remove kar diya gaya hai.
   async getDateEntryByIdWithUserDetails(dateId: number): Promise<any | null> {
     const query = `
-      SELECT 
-        d.*,
-        json_build_object('userId', uf.user_id, 'firstName', uf.first_name, 'profilePictureUrl', uf.profile_picture_url, 'videoUrl', uf.video_url) as "user_from_details",
-        json_build_object('userId', ut.user_id, 'firstName', ut.first_name, 'profilePictureUrl', ut.profile_picture_url) as "user_to_details"
-      FROM dates d
-      JOIN users uf ON d.user_from = uf.user_id
-      JOIN users ut ON d.user_to = ut.user_id
-      WHERE d.date_id = $1;
-    `
+      SELECT 
+        d.*,
+        json_build_object('userId', uf.user_id, 'firstName', uf.first_name, 'profilePictureUrl', uf.profile_picture_url, 'videoUrl', uf.video_url) as "user_from_details",
+        json_build_object('userId', ut.user_id, 'firstName', ut.first_name, 'profilePictureUrl', ut.profile_picture_url) as "user_to_details"
+      FROM dates d
+      JOIN users uf ON d.user_from = uf.user_id
+      JOIN users ut ON d.user_to = ut.user_id
+      WHERE d.date_id = $1;
+    `
     const { rows } = await pool.query(query, [dateId])
     if (rows.length === 0) return null
     return humps.camelizeKeys(rows[0])
@@ -68,31 +69,31 @@ class DatesRepository {
 
   async getUpcomingDatesByUserId(userId: string): Promise<UpcomingDate[]> {
     const query = `
-      SELECT
-        d.date_id as "dateId", 
-        d.date, 
-        d.time,
-        d.status,
-        d.updated_at as "updatedAt",
-        d.location_metadata as "locationMetadata",
-        d.user_from as "userFrom",
-        d.user_to as "userTo",
-        feedback.outcome AS "myOutcome",
-        feedback.notes AS "myNotes",
-        CASE
-          WHEN d.user_from = $1 THEN 
-            json_build_object('userId', ut.user_id, 'firstName', ut.first_name, 'profilePictureUrl', ut.profile_picture_url)
-          ELSE 
-            json_build_object('userId', uf.user_id, 'firstName', uf.first_name, 'profilePictureUrl', uf.profile_picture_url)
-        END as "otherUser"
-      FROM dates d
-      JOIN users uf ON d.user_from = uf.user_id
-      JOIN users ut ON d.user_to = ut.user_id
-      LEFT JOIN date_feedback AS feedback ON feedback.date_id = d.date_id AND feedback.user_id = $1
-      WHERE (d.user_from = $1 OR d.user_to = $1)
-      AND d.status IN ('approved', 'pending')
-      ORDER BY d.date DESC, d.time DESC;
-    `
+      SELECT
+        d.date_id as "dateId", 
+        d.date, 
+        d.time,
+        d.status,
+        d.updated_at as "updatedAt",
+        d.location_metadata as "locationMetadata",
+        d.user_from as "userFrom",
+        d.user_to as "userTo",
+        feedback.outcome AS "myOutcome",
+        feedback.notes AS "myNotes",
+        CASE
+          WHEN d.user_from = $1 THEN 
+            json_build_object('userId', ut.user_id, 'firstName', ut.first_name, 'profilePictureUrl', ut.profile_picture_url)
+          ELSE 
+            json_build_object('userId', uf.user_id, 'firstName', uf.first_name, 'profilePictureUrl', uf.profile_picture_url)
+        END as "otherUser"
+      FROM dates d
+      JOIN users uf ON d.user_from = uf.user_id
+      JOIN users ut ON d.user_to = ut.user_id
+      LEFT JOIN date_feedback AS feedback ON feedback.date_id = d.date_id AND feedback.user_id = $1
+      WHERE (d.user_from = $1 OR d.user_to = $1)
+      AND d.status IN ('approved', 'pending')
+      ORDER BY d.date DESC, d.time DESC;
+    `
     const { rows } = await pool.query(query, [userId])
     return rows.map((row) => humps.camelizeKeys(row)) as UpcomingDate[]
   }

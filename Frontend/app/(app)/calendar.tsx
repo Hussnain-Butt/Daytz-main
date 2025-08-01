@@ -299,6 +299,7 @@ const CalendarHomeScreen = () => {
     }
 
     try {
+      // ✅ The app makes API calls here to fetch data.
       const [calRes, upRes, countRes] = await Promise.all([
         getCalendarDaysByUserId(),
         getUpcomingDates(),
@@ -358,6 +359,7 @@ const CalendarHomeScreen = () => {
         setUpcomingDates([]);
       }
     } catch (error) {
+      // ✅ This is where the server error is caught.
       console.error('Failed to fetch screen data:', error);
       showPopup('Load Failed', 'Could not load your calendar data. Please try again.', 'error');
     } finally {
