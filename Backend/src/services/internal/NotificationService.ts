@@ -129,28 +129,36 @@ class NotificationService {
   async sendAttractionProposalNotification(
     senderUserId: string,
     receiverUserId: string,
-    storyDate: string,
+    storyDate: string, // Example: "2023-08-01"
     client: PoolClient | null = null,
   ) {
     const senderProfile = await this.getUserProfile(senderUserId, client)
     if (!senderProfile) return
 
-    const senderName = `${senderProfile.firstName || 'Someone'}`.trim()
-    const body = `${senderName} is interested in your story! Tap to see who.`
+    // ✅ BADLAV YAHAN SE SHURU HAI
+    // Date ko user-friendly format mein badlein (e.g., "2023-08-01" -> "August 1st")
+    const formattedDate = formatDate(new Date(storyDate), 'MMMM do')
+
+    // Naya title aur body text banayein
+    const title = `Interest for your ${formattedDate} story`
+    const body = `Someone wants to meet you on ${formattedDate}. Did you see anyone on that date you want to meet?`
     const type = 'ATTRACTION_PROPOSAL'
 
+    // Database mein naya message save karein
     await this.createDbNotification(receiverUserId, body, type, storyDate, senderUserId, client)
 
     const token = await this.getFcmToken(receiverUserId, client)
     if (token) {
+      // Push notification mein naya title aur body bhejein
       await this.sendFcmNotification(
         token,
-        "Someone's interested! 👀",
-        body,
+        title, // Naya title
+        body, // Naya body
         senderProfile.profilePictureUrl,
-        { type, storyDate: storyDate, senderUserId: senderUserId },
+        { type, storyDate: storyDate, senderUserId: senderUserId }, // Data payload wahi rahega
       )
     }
+    // ✅ BADLAV YAHAN KHATAM HAI
   }
 
   async sendNewMatchProposalNotification(
@@ -190,20 +198,15 @@ class NotificationService {
     const body = 'They feel the same. Does their Plan work for you to meet in real life?'
     const type = 'MATCH_PROPOSAL'
 
-    // ✅✅✅ --- THIS IS THE FIX --- ✅✅✅
-    // `date-fns` ka istemal karke date ko hamesha sahi YYYY-MM-DD format mein convert karein.
-    // Yeh timezone ki problem se bachata hai.
     const formattedDate = formatDate(new Date(attraction1.date!), 'yyyy-MM-dd')
-    // ✅✅✅ --- END OF FIX --- ✅✅✅
 
-    // Ab hum hamesha `formattedDate` ka use karenge.
     await this.createDbNotification(recipientId, body, type, formattedDate, senderId, client)
 
     const token = await this.getFcmToken(recipientId, client)
     if (token) {
       await this.sendFcmNotification(token, title, body, senderProfile.profilePictureUrl, {
         type: type,
-        dateForProposal: formattedDate, // Frontend ko hamesha sahi format milega
+        dateForProposal: formattedDate,
         userToId: senderId,
       })
     }

@@ -36,11 +36,11 @@ import { User } from '../../types/User';
 import { Attraction as AttractionResponse } from '../../types/Attraction';
 import { useUserStore } from '../../store/useUserStore';
 
-// --- Assets, Colors, Components (No changes here) ---
+// --- Assets, Colors, Components ---
 const BACK_ARROW_ICON = require('../../assets/back_arrow_icon.png');
 const BRAND_LOGO = require('../../assets/brand.png');
 const calcHappyIcon = require('../../assets/calc-happy.png');
-const calcErrorIcon = require('../../assets/calc-error.png'); // Corrected path
+const calcErrorIcon = require('../../assets/calc-error.png');
 const screenColors = {
   background: '#121212',
   textPrimary: '#FFFFFF',
@@ -56,6 +56,8 @@ const screenColors = {
   Black: '#000000',
   White: '#FFFFFF',
 };
+
+// BubblePopup Component
 const BubblePopup = ({ visible, type, title, message, buttonText, onClose }) => {
   if (!visible) return null;
   const isSuccess = type === 'success';
@@ -64,24 +66,30 @@ const BubblePopup = ({ visible, type, title, message, buttonText, onClose }) => 
   const buttonTextStyle = isSuccess ? styles.successButtonText : styles.errorButtonText;
   return (
     <Modal transparent visible={visible} animationType="fade" onRequestClose={onClose}>
+           {' '}
       <View style={styles.overlay}>
+               {' '}
         <View style={styles.popupContainer}>
-          <Image source={imageSource} style={styles.popupImage} />
+                    <Image source={imageSource} style={styles.popupImage} />         {' '}
           <View style={styles.bubble}>
-            <Text style={styles.popupTitle}>{title}</Text>
-            <Text style={styles.popupMessage}>{message}</Text>
+                        <Text style={styles.popupTitle}>{title}</Text>           {' '}
+            <Text style={styles.popupMessage}>{message}</Text>           {' '}
             <TouchableOpacity style={[styles.popupButton, buttonStyle]} onPress={onClose}>
-              <Text style={buttonTextStyle}>{buttonText}</Text>
+                            <Text style={buttonTextStyle}>{buttonText}</Text>           {' '}
             </TouchableOpacity>
+                     {' '}
           </View>
+                 {' '}
         </View>
+             {' '}
       </View>
+         {' '}
     </Modal>
   );
 };
 
 // Google Places API Key
-const GOOGLE_PLACES_API_KEY = 'AIzaSyBwOm3P6Ji4Bleg3bLsT2TiumWAQF57uBM'; // Updated API Key
+const GOOGLE_PLACES_API_KEY = 'AIzaSyBwOm3P6Ji4Bleg3bLsT2TiumWAQF57uBM';
 
 const ProposeDateScreen = () => {
   const router = useRouter();
@@ -105,14 +113,11 @@ const ProposeDateScreen = () => {
     title: '',
     message: '',
     onCloseCallback: undefined as (() => void) | undefined,
-  });
+  }); // New state for Google Places Autocomplete
 
-  // New state for Google Places Autocomplete
   const [predictions, setPredictions] = useState<any[]>([]);
   const [showPredictions, setShowPredictions] = useState(false);
   const debounceTimeoutRef = useRef<NodeJS.Timeout | null>(null);
-
-  // Ref for the TextInput to get its layout for modal positioning
   const venueInputRef = useRef<TextInput>(null);
   const [venueInputLayout, setVenueInputLayout] = useState({ x: 0, y: 0, width: 0, height: 0 });
 
@@ -175,7 +180,6 @@ const ProposeDateScreen = () => {
     fetchInitialData();
   }, [userToId, dateForProposal, authUser?.sub, logout]);
 
-  // Debounced function for fetching autocomplete predictions
   const fetchPredictions = useCallback((input: string) => {
     if (debounceTimeoutRef.current) {
       clearTimeout(debounceTimeoutRef.current);
@@ -184,8 +188,6 @@ const ProposeDateScreen = () => {
     debounceTimeoutRef.current = setTimeout(async () => {
       if (input.length < 3) {
         setPredictions([]);
-        // Only hide if input is too short, otherwise keep predictions visible
-        // setShowPredictions(false); // Removed: Avoid premature hiding
         return;
       }
 
@@ -196,17 +198,17 @@ const ProposeDateScreen = () => {
         const json = await response.json();
         if (json.predictions && json.predictions.length > 0) {
           setPredictions(json.predictions);
-          setShowPredictions(true); // Explicitly show if predictions are found
+          setShowPredictions(true);
         } else {
           setPredictions([]);
-          setShowPredictions(false); // Hide if no predictions
+          setShowPredictions(false);
         }
       } catch (e) {
         console.error('Error fetching place predictions:', e);
         setPredictions([]);
         setShowPredictions(false);
       }
-    }, 300); // Debounce for 300ms
+    }, 300);
   }, []);
 
   const handleVenueChangeText = (text: string) => {
@@ -216,9 +218,9 @@ const ProposeDateScreen = () => {
 
   const handlePredictionPress = (prediction: any) => {
     setVenueName(prediction.description);
-    setPredictions([]); // Clear predictions
-    setShowPredictions(false); // Hide prediction list after selection
-    Keyboard.dismiss(); // Dismiss keyboard after selection
+    setPredictions([]);
+    setShowPredictions(false);
+    Keyboard.dismiss();
   };
 
   const handleTimeConfirm = (time: Date) => {
@@ -228,7 +230,7 @@ const ProposeDateScreen = () => {
 
   const handleProposeDate = useCallback(async () => {
     Keyboard.dismiss();
-    setShowPredictions(false); // Ensure predictions are hidden on submission attempt
+    setShowPredictions(false);
 
     if (!authUser?.sub || !userToId || !selectedEventDate || !myAttraction) {
       showPopup('Error', 'Essential information is missing or match not found.', 'error');
@@ -244,7 +246,7 @@ const ProposeDateScreen = () => {
       userTo: userToId,
       date: format(selectedEventDate, 'yyyy-MM-dd'),
       time: format(selectedTime, 'HH:mm:ss'),
-      locationMetadata: { name: venueName.trim(), address: '' }, // Venue name now comes from autocomplete
+      locationMetadata: { name: venueName.trim(), address: '' },
       romanticRating: myAttraction.romanticRating || 0,
       sexualRating: myAttraction.sexualRating || 0,
       friendshipRating: myAttraction.friendshipRating || 0,
@@ -279,8 +281,9 @@ const ProposeDateScreen = () => {
     if (existingDate && existingDate.status !== 'cancelled' && existingDate.status !== 'declined') {
       return (
         <View style={styles.infoBox}>
-          <Text style={styles.infoBoxText}>Date Already Active</Text>
-          <Text style={styles.infoBoxSubText}>A proposal for this day already exists.</Text>
+                    <Text style={styles.infoBoxText}>Date Already Active</Text>         {' '}
+          <Text style={styles.infoBoxSubText}>A proposal for this day already exists.</Text>     
+           {' '}
         </View>
       );
     }
@@ -289,153 +292,151 @@ const ProposeDateScreen = () => {
         style={[styles.submitButton, (isSubmitting || !myAttraction) && styles.disabledButton]}
         onPress={handleProposeDate}
         disabled={isSubmitting || !myAttraction}>
+               {' '}
         {isSubmitting ? (
           <ActivityIndicator color={screenColors.buttonText} />
         ) : (
           <Text style={styles.submitButtonText}>Submit Proposal</Text>
         )}
+             {' '}
       </TouchableOpacity>
     );
   };
 
-  // Effect to hide predictions when keyboard is dismissed OR when modal itself closes
   useEffect(() => {
-    const keyboardDidHideListener = Keyboard.addListener('keyboardDidHide', () => {
-      // Only hide predictions if the user isn't actively interacting with the modal
-      // This is a common point of contention. We'll rely more on onFocus and onPredictionPress
-      // to control setShowPredictions.
-      // setShowPredictions(false); // Re-evaluating this based on persistent issue
-    });
-
+    const keyboardDidHideListener = Keyboard.addListener('keyboardDidHide', () => {});
     return () => {
       keyboardDidHideListener.remove();
     };
   }, []);
 
-  // --- JSX & Styles (No changes from here) ---
   if (isLoading) {
     return (
       <SafeAreaView style={[styles.container, styles.centered]}>
-        <ActivityIndicator size="large" color={screenColors.textPrimary} />
+                <ActivityIndicator size="large" color={screenColors.textPrimary} />     {' '}
       </SafeAreaView>
     );
   }
   if (error) {
     return (
       <SafeAreaView style={[styles.container, styles.centered]}>
-        <Text style={styles.errorText}>{error}</Text>
+                <Text style={styles.errorText}>{error}</Text>       {' '}
         <TouchableOpacity onPress={() => router.back()} style={styles.backButtonError}>
-          <Text style={styles.backButtonText}>Go Back</Text>
+                    <Text style={styles.backButtonText}>Go Back</Text>       {' '}
         </TouchableOpacity>
+             {' '}
       </SafeAreaView>
     );
   }
 
   return (
     <SafeAreaView style={styles.container}>
+           {' '}
       <KeyboardAvoidingView
         behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
         style={{ flex: 1 }}>
+               {' '}
         <ScrollView
           contentContainerStyle={styles.scrollContentContainer}
-          // IMPORTANT: keyboardShouldPersistTaps="handled" is correctly placed here.
-          // This allows the keyboard to stay open even when tapping outside the TextInput,
-          // which is essential for interacting with the prediction list.
           keyboardShouldPersistTaps="handled"
           showsVerticalScrollIndicator={false}
-          // The pointerEvents property on the ScrollView is crucial.
-          // When predictions are shown (modal is active), this ensures touch events
-          // are directed to the modal overlay, not the underlying ScrollView content.
-          // This prevents accidental blurring of the TextInput or interaction with other elements.
           pointerEvents={showPredictions ? 'none' : 'auto'}>
+                   {' '}
           <View style={styles.innerContainer}>
+                       {' '}
             <View style={styles.headerContainer}>
+                           {' '}
               <TouchableOpacity onPress={() => router.back()} style={styles.backButton}>
-                <Image source={BACK_ARROW_ICON} style={styles.backIcon} />
+                                <Image source={BACK_ARROW_ICON} style={styles.backIcon} />         
+                   {' '}
               </TouchableOpacity>
-              <Image source={BRAND_LOGO} style={styles.headerLogo} />
-              <View style={{ width: 40 }} />
+                            <Image source={BRAND_LOGO} style={styles.headerLogo} />
+                            <View style={{ width: 40 }} />           {' '}
             </View>
+                       {' '}
             <View style={styles.mainContent}>
+                           {' '}
               <View style={styles.userInfoContainer}>
+                               {' '}
                 {targetUser?.profilePictureUrl ? (
-                  <Avatar.Image
-                    size={64}
-                    source={{ uri: targetUser.profilePictureUrl }}
-                    style={styles.avatar}
-                  />
+                  <Avatar.Image size={64} source={{ uri: targetUser.profilePictureUrl }} />
                 ) : (
                   <Avatar.Icon size={64} icon="account" style={styles.avatarPlaceholder} />
                 )}
-                <Text style={styles.userName}>{targetUser?.firstName || 'User'}</Text>
+                               {' '}
+                <Text style={styles.userName}>{targetUser?.firstName || 'User'}</Text>           
+                 {' '}
               </View>
+                           {' '}
               {selectedEventDate && (
                 <Text style={styles.dateDisplay}>
-                  Date: {format(selectedEventDate, 'MMM dd, yyyy')}
+                                    Date: {format(selectedEventDate, 'MMM dd, yyyy')}             
+                   {' '}
                 </Text>
               )}
+                           {' '}
               <View style={styles.inputContainer}>
-                <Text style={styles.inputLabel}>Venue</Text>
+                                <Text style={styles.inputLabel}>Venue</Text>
+                               {' '}
                 <TextInput
-                  ref={venueInputRef} // Assign the ref
+                  ref={venueInputRef}
                   style={styles.textInput}
                   placeholder="e.g., boo Club, East Anaheim Street..."
                   placeholderTextColor={screenColors.inputPlaceholder}
                   value={venueName}
                   onChangeText={handleVenueChangeText}
                   onFocus={() => {
-                    // When the TextInput gains focus, and there's enough text for predictions, show them.
-                    // This covers cases where the user might tap back into the field.
                     if (venueName.length >= 3) {
                       setShowPredictions(true);
                     }
                   }}
-                  // Removed `onBlur` from here. The modal overlay handles dismissal.
                   onLayout={() => {
-                    // Measure the TextInput's position and size relative to the screen
                     venueInputRef.current?.measureInWindow((fx, fy, fwidth, fheight) => {
                       setVenueInputLayout({ x: fx, y: fy, width: fwidth, height: fheight });
                     });
                   }}
                 />
+                             {' '}
               </View>
+                           {' '}
               <View style={styles.inputContainer}>
-                <Text style={styles.inputLabel}>Time</Text>
+                                <Text style={styles.inputLabel}>Time</Text>               {' '}
                 <TouchableOpacity onPress={() => setShowTimePicker(true)} style={styles.textInput}>
+                                   {' '}
                   <Text
                     style={[
                       styles.inputText,
                       !selectedTime && { color: screenColors.inputPlaceholder },
                     ]}>
-                    {selectedTime ? format(selectedTime, 'p') : 'Select a time'}
+                                        {selectedTime ? format(selectedTime, 'p') : 'Select a time'}
+                                     {' '}
                   </Text>
+                                 {' '}
                 </TouchableOpacity>
+                             {' '}
               </View>
+                         {' '}
             </View>
+                     {' '}
           </View>
+                 {' '}
         </ScrollView>
-        <View style={styles.footer}>{renderFooter()}</View>
+                <View style={styles.footer}>{renderFooter()}</View>     {' '}
       </KeyboardAvoidingView>
-
-      {/* Modal for Autocomplete Predictions */}
+           {' '}
       <Modal
         transparent
-        visible={showPredictions && predictions.length > 0} // Only show modal if there are predictions
-        onRequestClose={() => setShowPredictions(false)} // Android hardware back button
+        visible={showPredictions && predictions.length > 0}
+        onRequestClose={() => setShowPredictions(false)}
         animationType="fade">
-        {/* This TouchableOpacity serves as the overlay. Tapping anywhere on it (outside the prediction list)
-            will dismiss the predictions. This is the primary way to hide the predictions manually. */}
+               {' '}
         <TouchableOpacity
           style={styles.modalOverlay}
-          activeOpacity={1} // Prevents visual feedback on tap of the transparent overlay
-          onPress={() => setShowPredictions(false)} // Dismiss predictions
-        >
-          {/* TouchableWithoutFeedback wraps the FlatList to ensure that taps *within* the FlatList
-              (i.e., on a prediction item) do NOT propagate up to the modalOverlay and dismiss the modal prematurely. */}
-          <TouchableWithoutFeedback
-            onPress={() => {
-              /* Do nothing, just stop propagation so parent TouchableOpacity doesn't fire */
-            }}>
+          activeOpacity={1}
+          onPress={() => setShowPredictions(false)}>
+                   {' '}
+          <TouchableWithoutFeedback onPress={() => {}}>
+                       {' '}
             <View
               style={[
                 styles.predictionsModalContainer,
@@ -445,33 +446,38 @@ const ProposeDateScreen = () => {
                   width: venueInputLayout.width,
                 },
               ]}>
+                           {' '}
               <FlatList
                 data={predictions}
                 keyExtractor={(item) => item.place_id}
                 renderItem={({ item }) => (
                   <TouchableOpacity
                     style={styles.predictionItem}
-                    onPress={() => handlePredictionPress(item)} // This will also hide predictions
-                  >
-                    <Text style={styles.predictionText}>{item.description}</Text>
+                    onPress={() => handlePredictionPress(item)}>
+                                       {' '}
+                    <Text style={styles.predictionText}>{item.description}</Text>               
+                     {' '}
                   </TouchableOpacity>
                 )}
                 style={styles.predictionsListModal}
-                // VERY IMPORTANT: Allows taps on list items to register WITHOUT dismissing the keyboard.
-                // This is crucial for smooth selection.
                 keyboardShouldPersistTaps="always"
               />
+                         {' '}
             </View>
+                     {' '}
           </TouchableWithoutFeedback>
+                 {' '}
         </TouchableOpacity>
+             {' '}
       </Modal>
-
+           {' '}
       <DateTimePickerModal
         isVisible={showTimePicker}
         mode="time"
         onConfirm={handleTimeConfirm}
         onCancel={() => setShowTimePicker(false)}
       />
+           {' '}
       <BubblePopup
         visible={popupState.visible}
         type={popupState.type}
@@ -484,6 +490,7 @@ const ProposeDateScreen = () => {
           if (callback) callback();
         }}
       />
+         {' '}
     </SafeAreaView>
   );
 };
@@ -630,22 +637,21 @@ const styles = StyleSheet.create({
   successButton: { backgroundColor: screenColors.GoldPrimary },
   errorButtonText: { color: screenColors.White, fontSize: 15, fontWeight: 'bold' },
   successButtonText: { color: screenColors.Black, fontSize: 15, fontWeight: 'bold' },
-  // New styles for modal predictions
   modalOverlay: {
     flex: 1,
-    backgroundColor: 'transparent', // The overlay itself is transparent
+    backgroundColor: 'transparent',
   },
   predictionsModalContainer: {
     position: 'absolute',
     backgroundColor: screenColors.inputBackground,
     borderRadius: 12,
-    maxHeight: 200, // Limit height for scrollability
+    maxHeight: 200,
     borderWidth: 1,
     borderColor: '#48484A',
-    overflow: 'hidden', // Ensures content respects border radius
+    overflow: 'hidden',
   },
   predictionsListModal: {
-    flexGrow: 1, // Allows FlatList to grow within its container
+    flexGrow: 1,
   },
   predictionItem: {
     padding: 16,

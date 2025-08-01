@@ -254,7 +254,7 @@ export default function AttractionScreen() {
 
       const matchHappened = response.data.match === true;
       const message = matchHappened
-        ? "It's a Match! You'll be notified if you get to propose the date."
+        ? "I'll let you know if they feel the same"
         : 'Your attraction has been sent!';
 
       showPopup('Success!', message, 'success', () => router.replace('/(app)/calendar'));

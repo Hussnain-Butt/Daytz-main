@@ -30,7 +30,7 @@ import {
 import { CalendarDay } from '../../types/CalendarDay';
 import { UpcomingDate, DateOutcome } from '../../types/Date';
 import { useRouter, useFocusEffect } from 'expo-router';
-import { format, parseISO, isPast, isValid } from 'date-fns'; // ✅ NAYA: isValid import karein
+import { format, parseISO, isPast, isValid } from 'date-fns';
 import { Avatar } from 'react-native-paper';
 import { Ionicons } from '@expo/vector-icons';
 
@@ -39,7 +39,7 @@ const LOGO_IMAGE = require('../../assets/brand.png');
 const calcHappyIcon = require('../../assets/calc-happy.png');
 const calcErrorIcon = require('../../assets/calc-error.png');
 
-// --- FeedbackModal component (unchanged) ---
+// --- FeedbackModal component (No changes needed) ---
 const FeedbackModal = ({ visible, onClose, onSubmit }) => {
   const [selectedOutcome, setSelectedOutcome] = useState<DateOutcome | null>(null);
   const [notes, setNotes] = useState('');
@@ -87,7 +87,6 @@ const FeedbackModal = ({ visible, onClose, onSubmit }) => {
               onPress={() => handleSelectOutcome('amazing')}>
               <Text style={styles.feedbackButtonText}>Date Went Amazing</Text>
             </TouchableOpacity>
-
             <TouchableOpacity
               style={[
                 styles.feedbackButton,
@@ -98,7 +97,6 @@ const FeedbackModal = ({ visible, onClose, onSubmit }) => {
               onPress={() => handleSelectOutcome('no_show_cancelled')}>
               <Text style={styles.feedbackButtonText}>Stood Up / Cancelled</Text>
             </TouchableOpacity>
-
             <TouchableOpacity
               style={[
                 styles.feedbackButton,
@@ -147,7 +145,7 @@ const FeedbackModal = ({ visible, onClose, onSubmit }) => {
   );
 };
 
-// --- BubblePopup component (unchanged) ---
+// --- BubblePopup component (No changes needed) ---
 const BubblePopup = ({ visible, type, title, message, buttonText, onClose }) => {
   if (!visible) return null;
   const isSuccess = type === 'success';
@@ -174,7 +172,7 @@ const BubblePopup = ({ visible, type, title, message, buttonText, onClose }) => 
   );
 };
 
-// --- Helper for attraction type (unchanged) ---
+// --- Helper for attraction type (No changes needed) ---
 const getTypeOfAttraction = (r: number, s: number, f: number) => {
   const interest = r + s + f;
   if (interest === 0) return 'Not Specified';
@@ -191,17 +189,16 @@ const getTypeOfAttraction = (r: number, s: number, f: number) => {
   return 'My Person!';
 };
 
-// --- ✅✅✅ UpcomingDateItem component (UPDATED WITH NULL CHECKS) ✅✅✅ ---
+// --- ✅✅✅ UpcomingDateItem component (YAHAN BADLAV KIYA GAYA HAI) ✅✅✅ ---
 const UpcomingDateItem = ({
   item,
   onPress,
   onRatePress,
 }: {
   item: UpcomingDate;
-  onPress: Function;
-  onRatePress: Function;
+  onPress: (item: UpcomingDate) => void;
+  onRatePress: (item: UpcomingDate) => void;
 }) => {
-  // ✅ NULL GUARD 1: Agar item null hai ya zaroori data nahi hai, to kuch render na karein.
   if (!item || !item.date || !item.otherUser) {
     return null;
   }
@@ -212,13 +209,12 @@ const UpcomingDateItem = ({
     item.friendshipRating
   );
 
-  // ✅ NULL GUARD 2: Date ko safely parse karein
   const parsedDate = parseISO(item.date);
   const isValidDate = isValid(parsedDate);
 
-  const canGiveFeedback =
-    isValidDate && item.status === 'approved' && isPast(parsedDate) && !item.myOutcome;
-  const hasGivenFeedback = !!item.myOutcome;
+  // ✅ YEH LOGIC AAPKI REQUIREMENT POORI KAREGA
+  const isDateInPast = isValidDate && isPast(parsedDate); // Check if the date has passed
+  const hasGivenFeedback = !!item.myOutcome; // Check if feedback is already submitted
 
   return (
     <TouchableOpacity style={styles.upcomingItem} onPress={() => onPress(item)}>
@@ -246,12 +242,22 @@ const UpcomingDateItem = ({
           <Ionicons name="checkmark-circle" size={20} color={colors.Success} />
           <Text style={styles.statusText}>Confirmed</Text>
         </View>
-        {canGiveFeedback && (
+
+        {/* ✅ YAHAN CONDITIONAL RENDERING KA NAYA LOGIC HAI */}
+        {hasGivenFeedback ? (
+          // 1. Agar feedback de diya hai, to yeh dikhao
+          <Text style={styles.feedbackSentText}>Feedback Sent</Text>
+        ) : isDateInPast ? (
+          // 2. Agar date guzar gayi hai aur feedback nahi diya, to active button dikhao
           <TouchableOpacity style={styles.rateButton} onPress={() => onRatePress(item)}>
             <Text style={styles.rateButtonText}>Rate Date</Text>
           </TouchableOpacity>
+        ) : (
+          // 3. Agar date aane wali hai, to disabled button dikhao
+          <View style={[styles.rateButton, styles.disabledRateButton]}>
+            <Text style={styles.disabledRateButtonText}>Rate Date</Text>
+          </View>
         )}
-        {hasGivenFeedback && <Text style={styles.feedbackSentText}>Feedback Sent</Text>}
       </View>
     </TouchableOpacity>
   );
@@ -299,7 +305,6 @@ const CalendarHomeScreen = () => {
         getUnreadNotificationsCount(),
       ]);
 
-      // ✅✅✅ BADLAV: API se aaye data ko pehle filter karein ✅✅✅
       const validDates = (upRes.data || []).filter((item) => item && item.date && item.otherUser);
 
       setUnreadCount(countRes.data.unreadCount);
@@ -312,9 +317,8 @@ const CalendarHomeScreen = () => {
             const from =
               d.userFrom === userProfile.userId ? userProfile.userId : d.otherUser.userId;
             const to = from === userProfile.userId ? d.otherUser.userId : userProfile.userId;
-            // ✅ BADLAV: Safely parse date
             const parsedDate = parseISO(d.date);
-            if (!isValid(parsedDate)) return Promise.resolve(null); // Invalid date ko skip karein
+            if (!isValid(parsedDate)) return Promise.resolve(null);
 
             return getAttractionByUserFromUserToAndDate(
               from,
@@ -604,11 +608,22 @@ const styles = StyleSheet.create({
     alignItems: 'center',
   },
   rateButtonText: { color: colors.White || '#FFFFFF', fontSize: 12, fontWeight: 'bold' },
+  // ✅ NAYA STYLE: Disabled button ke liye
+  disabledRateButton: {
+    backgroundColor: colors.DarkGrey || '#555555',
+  },
+  // ✅ NAYA STYLE: Disabled button ke text ke liye
+  disabledRateButtonText: {
+    color: colors.Grey || '#9CA4A4',
+    fontSize: 12,
+    fontWeight: 'bold',
+  },
   feedbackSentText: {
     marginTop: 8,
     color: colors.GoldPrimary || '#FFDB5C',
     fontSize: 12,
     fontStyle: 'italic',
+    textAlign: 'center',
   },
   overlay: {
     flex: 1,

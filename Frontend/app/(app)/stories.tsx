@@ -1,5 +1,5 @@
 // --- COMPLETE FINAL UPDATED CODE: app/(app)/stories/index.tsx ---
-// This version implements the "disable story on block" and "unblock" button logic.
+// This version implements performance optimizations for smoother swiping.
 
 import React, { useState, useEffect, useRef, useCallback, useMemo } from 'react';
 import {
@@ -24,7 +24,6 @@ import { Gesture, GestureDetector } from 'react-native-gesture-handler';
 import { runOnJS, useSharedValue, useAnimatedStyle, withTiming } from 'react-native-reanimated';
 import { BottomSheetModal, BottomSheetView, BottomSheetBackdrop } from '@gorhom/bottom-sheet';
 
-// ✅ unblockUser API function import karein
 import {
   getStoriesByDate,
   getPlayableVideoUrl,
@@ -43,7 +42,7 @@ import { colors } from '../../utils/theme';
 const CLOSE_ICON = require('../../assets/close_icon.png');
 const ATTRACTION_ICON = require('../../assets/calendarButton.png');
 const BLOCK_ICON = require('../../assets/blockIcon.png');
-const UNBLOCK_ICON = require('../../assets/unblockIcon.png'); // ✅ NAYA ICON (Make sure this file exists in assets)
+const UNBLOCK_ICON = require('../../assets/unblockIcon.png');
 const DEFAULT_PROFILE_PIC = require('../../assets/characterIcon.png');
 const calcHappyIcon = require('../../assets/calc-happy.png');
 const calcErrorIcon = require('../../assets/calc-error.png');
@@ -64,7 +63,6 @@ const VIDEO_CARD_HEIGHT = Math.max(150, CALCULATED_VIDEO_CARD_HEIGHT);
 const VIDEO_CARD_WIDTH = SCREEN_WIDTH - 2 * CARD_HORIZONTAL_INSET;
 
 // --- Interfaces and Types ---
-// ✅ Story type mein `isBlocked` add karein
 interface StoryWithKey extends StoryQueryResult {
   uniqueStoryId: string;
   hasExistingAttraction: boolean;
@@ -113,7 +111,6 @@ const styles = StyleSheet.create({
     overflow: 'hidden',
   },
   videoElement: { ...StyleSheet.absoluteFillObject },
-  // ✅ NAYA: Blocked story ke liye overlay
   blockedOverlay: {
     ...StyleSheet.absoluteFillObject,
     backgroundColor: 'rgba(0, 0, 0, 0.7)',
@@ -282,7 +279,11 @@ const StoryProgressBars: React.FC<StoryProgressBarsProps> = React.memo(
         {Array.from({ length: storiesCount }).map((_, index) => {
           const animatedStyle = useAnimatedStyle(() => ({
             width: withTiming(
-              `${index === currentStoryIndex ? Math.max(0, Math.min(1, currentVideoProgress.value)) * 100 : 0}%`,
+              `${
+                index === currentStoryIndex
+                  ? Math.max(0, Math.min(1, currentVideoProgress.value)) * 100
+                  : 0
+              }%`,
               { duration: 50 }
             ),
           }));
@@ -491,11 +492,11 @@ export default function StoriesScreen() {
   const flatListRef = useRef<FlatList<StoryWithKey>>(null);
   const videoRefs = useRef<Record<string, Video | null>>({});
 
-  const updateStoryInState = (userId: string, updates: Partial<StoryWithKey>) => {
+  const updateStoryInState = useCallback((userId: string, updates: Partial<StoryWithKey>) => {
     setStories((prevStories) =>
       prevStories.map((story) => (story.userId === userId ? { ...story, ...updates } : story))
     );
-  };
+  }, []);
 
   useEffect(() => {
     StatusBar.setBarStyle('light-content');
@@ -552,7 +553,7 @@ export default function StoriesScreen() {
           userName: story.userName || 'User',
           uniqueStoryId: story.calendarId?.toString() ?? `generated-${date}-${index}`,
           hasExistingAttraction: attractionResults[index],
-          isBlocked: story.isBlocked || false, // Ensure isBlocked is always boolean
+          isBlocked: story.isBlocked || false,
         }));
 
         if (initialUserId) {
@@ -599,7 +600,7 @@ export default function StoriesScreen() {
       fetchUrlForStory(currentIndex);
       if (currentIndex + 1 < stories.length) fetchUrlForStory(currentIndex + 1);
     }
-  }, [currentIndex, stories, playableUrls]);
+  }, [currentIndex, stories]); // Removed playableUrls from dependency array to avoid re-triggering
 
   const pauseAllVideos = useCallback(async () => {
     await Promise.all(Object.values(videoRefs.current).map((v) => v?.pauseAsync().catch(() => {})));
@@ -737,7 +738,7 @@ export default function StoriesScreen() {
       currentVideoProgress.value = 0;
       flatListRef.current?.scrollToIndex({ index, animated: true });
     },
-    [stories, currentIndex]
+    [stories, currentIndex] // Removed currentVideoProgress from deps
   );
 
   const onViewableItemsChanged = useRef(({ viewableItems }: any) => {
@@ -748,6 +749,7 @@ export default function StoriesScreen() {
         if (oldStoryId && videoRefs.current[oldStoryId]) {
           videoRefs.current[oldStoryId]?.stopAsync().catch(() => {});
         }
+        // This state update is handled by the effect below to avoid race conditions
         runOnJS(setCurrentIndex)(newVisibleIndex);
         currentVideoProgress.value = 0;
       }
@@ -785,10 +787,13 @@ export default function StoriesScreen() {
           videoRef={(ref) => (videoRefs.current[storyId] = ref)}
           onPlaybackStatusUpdate={(status: AVPlaybackStatus) => {
             if (index !== currentIndex || !status.isLoaded || item.isBlocked) return;
-            if (videoLoadStates[storyId] !== 'loaded')
-              runOnJS(setVideoLoadStates)((prev) => ({ ...prev, [storyId]: 'loaded' }));
-            if (status.durationMillis)
+
+            // ✅ OPTIMIZATION: State update `setVideoLoadStates` yahan se hata diya gaya hai.
+            // Yeh ab sirf onReadyForDisplay mein call hoga. Isse bewajah ke re-renders kam honge.
+
+            if (status.durationMillis) {
               currentVideoProgress.value = status.positionMillis / status.durationMillis;
+            }
 
             if (status.didJustFinish && !status.isLooping) {
               const nextIndex = index + 1;
@@ -822,7 +827,7 @@ export default function StoriesScreen() {
     },
     [
       currentIndex,
-      stories,
+      stories.length, // Only depend on length, not the whole array
       playableUrls,
       videoLoadStates,
       goToStory,
@@ -874,10 +879,10 @@ export default function StoriesScreen() {
         pagingEnabled
         showsHorizontalScrollIndicator={false}
         onViewableItemsChanged={onViewableItemsChanged}
-        viewabilityConfig={{ viewAreaCoveragePercentThreshold: 50, waitForInteraction: false }}
+        viewabilityConfig={{ viewAreaCoveragePercentThreshold: 50 }}
         initialNumToRender={1}
         maxToRenderPerBatch={1}
-        windowSize={3}
+        windowSize={3} // 1 visible, 1 next, 1 previous. Memory aur performance ka accha balance.
         getItemLayout={(_data, index) => ({
           length: SCREEN_WIDTH,
           offset: SCREEN_WIDTH * index,
@@ -886,6 +891,8 @@ export default function StoriesScreen() {
         onScrollBeginDrag={() => (isSwiping.current = true)}
         onMomentumScrollEnd={() => (isSwiping.current = false)}
         bounces={false}
+        // ✅ OPTIMIZATION: Yeh prop memory usage kam karne mein madad karta hai, khaas kar Android par.
+        removeClippedSubviews={true}
       />
       <BottomSheetModal
         ref={bottomSheetModalRef}

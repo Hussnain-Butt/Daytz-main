@@ -14,7 +14,7 @@ const notificationService = new NotificationService()
 
 console.log('[DateHandler] Services instantiated (Dates, Notification).')
 
-// --- createDateHandler (No changes needed) ---
+// --- createDateHandler ---
 export const createDateHandler = asyncHandler(
   async (req: CustomRequest, res: Response, next: NextFunction) => {
     const proposerUserId = req.userId
@@ -65,9 +65,7 @@ export const createDateHandler = asyncHandler(
   },
 )
 
-// --- ✅✅✅ updateDateHandler (LOGIC REBUILT) ✅✅✅ ---
-// Yeh function ab reschedule requests ko 'pending' status mein daalta hai
-// aur turn-based approval system ko handle karta hai.
+// --- updateDateHandler ---
 export const updateDateHandler = asyncHandler(
   async (req: CustomRequest, res: Response, next: NextFunction) => {
     const updaterUserId = req.userId
@@ -101,7 +99,6 @@ export const updateDateHandler = asyncHandler(
       const otherUserId =
         dateToUpdate.userFrom === updaterUserId ? dateToUpdate.userTo : dateToUpdate.userFrom
 
-      // Case 1: User is submitting new details (reschedule proposal or counter-proposal).
       if (date || time || locationMetadata) {
         if (!['approved', 'pending'].includes(dateToUpdate.status)) {
           return res
@@ -112,27 +109,21 @@ export const updateDateHandler = asyncHandler(
         if (time) updatePayload.time = time
         if (locationMetadata) updatePayload.locationMetadata = locationMetadata
 
-        // A reschedule proposal makes the date 'pending' until the other user responds.
         updatePayload.status = 'pending'
 
-        // The user proposing the change automatically approves it. The other user's approval is now needed.
         if (updaterUserId === dateToUpdate.userFrom) {
           updatePayload.userFromApproved = true
           updatePayload.userToApproved = false
         } else {
-          // updater is userTo
           updatePayload.userToApproved = true
           updatePayload.userFromApproved = false
         }
         notificationAction = 'RESCHEDULE'
-
-        // Case 2: User is responding to a proposal (e.g., accepting or declining).
       } else if (status && ['approved', 'declined'].includes(status)) {
         if (dateToUpdate.status !== 'pending') {
           return res.status(400).json({ message: 'This date is no longer pending a response.' })
         }
 
-        // Check if it's the current user's turn to respond (their approval flag must be false).
         const myApprovalFlag =
           updaterUserId === dateToUpdate.userFrom
             ? dateToUpdate.userFromApproved
@@ -145,18 +136,13 @@ export const updateDateHandler = asyncHandler(
         }
 
         if (status === 'declined') {
-          // Note: 'declined' is a final status. To cancel, use the cancelDateHandler.
           updatePayload.status = 'declined'
         } else {
-          // status === 'approved'
-          // The user approves, so we set their flag to true.
           if (updaterUserId === dateToUpdate.userFrom) {
             updatePayload.userFromApproved = true
           } else {
-            // updater is userTo
             updatePayload.userToApproved = true
           }
-          // Now both parties have approved, so the date becomes 'approved' overall.
           updatePayload.status = 'approved'
         }
         notificationAction = 'RESPONSE'
@@ -190,7 +176,7 @@ export const updateDateHandler = asyncHandler(
   },
 )
 
-// --- cancelDateHandler (No changes needed) ---
+// --- cancelDateHandler ---
 export const cancelDateHandler = asyncHandler(
   async (req: CustomRequest, res: Response, next: NextFunction) => {
     const cancellerUserId = req.userId
@@ -245,10 +231,9 @@ export const cancelDateHandler = asyncHandler(
   },
 )
 
-// --- Other handlers (No changes needed) ---
+// --- Other handlers ---
 export const addDateFeedbackHandler = asyncHandler(
   async (req: CustomRequest, res: Response, next: NextFunction) => {
-    // Implementation is correct and unchanged
     const userId = req.userId
     const dateId = Number(req.params.dateId)
     const { outcome, notes } = req.body
@@ -276,7 +261,6 @@ export const addDateFeedbackHandler = asyncHandler(
 
 export const getDateByIdHandler = asyncHandler(
   async (req: CustomRequest, res: Response, next: NextFunction) => {
-    // Implementation is correct and unchanged
     const userId = req.userId
     const { dateId } = req.params
     if (!userId) return res.status(401).json({ message: 'Unauthorized.' })
@@ -302,7 +286,6 @@ export const getDateByIdHandler = asyncHandler(
 
 export const getDateByUserFromUserToAndDateHandler = asyncHandler(
   async (req: CustomRequest, res: Response, next: NextFunction) => {
-    // Implementation is correct and unchanged
     const userId = req.userId
     const { userFrom, userTo, date } = req.params
     if (!userId) return res.status(401).json({ message: 'Unauthorized.' })
@@ -316,7 +299,6 @@ export const getDateByUserFromUserToAndDateHandler = asyncHandler(
 
 export const getUpcomingDatesHandler = asyncHandler(
   async (req: CustomRequest, res: Response, next: NextFunction) => {
-    // Implementation is correct and unchanged
     const userId = req.userId
     if (!userId) {
       return res.status(401).json({ message: 'Unauthorized' })
