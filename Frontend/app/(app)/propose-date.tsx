@@ -376,8 +376,7 @@ const ProposeDateScreen = () => {
               )}
                            {' '}
               <View style={styles.inputContainer}>
-                                <Text style={styles.inputLabel}>Venue</Text>
-                               {' '}
+                                <Text style={styles.inputLabel}>Venue</Text>               {' '}
                 <TextInput
                   ref={venueInputRef}
                   style={styles.textInput}

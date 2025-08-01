@@ -251,22 +251,32 @@ const BubblePopup = ({ visible, type, title, message, buttonText, onClose }) => 
   const isSuccess = type === 'success';
   return (
     <Modal transparent visible={visible} animationType="fade" onRequestClose={onClose}>
+           {' '}
       <View style={styles.overlay}>
+               {' '}
         <View style={styles.popupContainer}>
-          <Image source={isSuccess ? calcHappyIcon : calcErrorIcon} style={styles.popupImage} />
+                   {' '}
+          <Image source={isSuccess ? calcHappyIcon : calcErrorIcon} style={styles.popupImage} />   
+               {' '}
           <View style={styles.bubble}>
-            <Text style={styles.popupTitle}>{title}</Text>
-            <Text style={styles.popupMessage}>{message}</Text>
+                        <Text style={styles.popupTitle}>{title}</Text>           {' '}
+            <Text style={styles.popupMessage}>{message}</Text>           {' '}
             <TouchableOpacity
               style={[styles.popupButton, isSuccess ? styles.successButton : styles.errorButton]}
               onPress={onClose}>
+                           {' '}
               <Text style={isSuccess ? styles.successButtonText : styles.errorButtonText}>
-                {buttonText}
+                                {buttonText}             {' '}
               </Text>
+                         {' '}
             </TouchableOpacity>
+                     {' '}
           </View>
+                 {' '}
         </View>
+             {' '}
       </View>
+         {' '}
     </Modal>
   );
 };
@@ -276,6 +286,7 @@ const StoryProgressBars: React.FC<StoryProgressBarsProps> = React.memo(
     if (storiesCount <= 1) return null;
     return (
       <View style={styles.progressBarsContainer}>
+               {' '}
         {Array.from({ length: storiesCount }).map((_, index) => {
           const animatedStyle = useAnimatedStyle(() => ({
             width: withTiming(
@@ -294,19 +305,24 @@ const StoryProgressBars: React.FC<StoryProgressBarsProps> = React.memo(
               onPress={() => onBarPress?.(index)}
               activeOpacity={0.8}
               disabled={!onBarPress}>
+                           {' '}
               <View
                 style={[
                   styles.progressBarBackground,
                   index < currentStoryIndex && styles.progressBarFilled,
                   index === currentStoryIndex && styles.progressBarActiveBackground,
                 ]}>
+                               {' '}
                 {index === currentStoryIndex && (
                   <Animated.View style={[styles.progressBarFilled, animatedStyle]} />
                 )}
+                             {' '}
               </View>
+                         {' '}
             </TouchableOpacity>
           );
         })}
+             {' '}
       </View>
     );
   }
@@ -350,12 +366,15 @@ const StoryPage = React.memo(
 
     return (
       <GestureDetector gesture={panGesture}>
+               {' '}
         <View style={styles.page}>
+                   {' '}
           <TouchableOpacity
             style={styles.videoCard}
             activeOpacity={1}
             onPress={onVideoTap}
             disabled={isBlocked}>
+                       {' '}
             {playableUrl && playableUrl !== 'loading' && playableUrl !== 'error' && (
               <Video
                 ref={videoRef}
@@ -374,58 +393,79 @@ const StoryPage = React.memo(
                 bufferForPlaybackAfterRebufferMs={Platform.OS === 'android' ? 3000 : 2000}
               />
             )}
+                       {' '}
             {isBlocked && (
               <View style={styles.blockedOverlay}>
-                <Text style={styles.blockedText}>Blocked</Text>
+                                <Text style={styles.blockedText}>Blocked</Text>             {' '}
               </View>
             )}
+                       {' '}
             {(videoLoadState === 'loading' || videoLoadState === 'initial') &&
               !isBlocked &&
               playableUrl !== 'error' &&
               playableUrl !== null && (
                 <View style={styles.videoCardActivityIndicator}>
-                  <ActivityIndicator size="large" color={colors.White || '#FFF'} />
+                                   {' '}
+                  <ActivityIndicator size="large" color={colors.White || '#FFF'} />             
+                   {' '}
                 </View>
               )}
+                       {' '}
             {(playableUrl === 'error' || playableUrl === null || videoLoadState === 'error') &&
               !isBlocked && (
                 <View style={styles.videoCardErrorDisplay}>
-                  <Text style={styles.errorTextVideo}>Video unavailable</Text>
+                                    <Text style={styles.errorTextVideo}>Video unavailable</Text>   
+                             {' '}
                 </View>
               )}
+                     {' '}
           </TouchableOpacity>
+                   {' '}
           <SafeAreaView style={styles.overlayContainer} pointerEvents="box-none">
+                       {' '}
             <View style={styles.header}>
+                           {' '}
               <StoryProgressBars
                 storiesCount={storiesCount}
                 currentStoryIndex={currentIndex}
                 currentVideoProgress={currentVideoProgress}
                 onBarPress={isBlocked ? undefined : onGoToStory}
               />
+                           {' '}
               <View style={styles.headerTopRow}>
+                               {' '}
                 <TouchableOpacity
                   style={styles.userInfoContainer}
                   onPress={onPresentModal}
                   activeOpacity={0.7}>
+                                   {' '}
                   <Image
                     source={
                       item.profilePictureUrl ? { uri: item.profilePictureUrl } : DEFAULT_PROFILE_PIC
                     }
                     style={styles.avatar}
                   />
+                                   {' '}
                   <Text style={styles.userNameText} numberOfLines={1}>
-                    {' '}
-                    {item.userName || 'User'}{' '}
+                                                            {item.userName || 'User'}              
+                       {' '}
                   </Text>
+                                 {' '}
                 </TouchableOpacity>
+                               {' '}
                 <TouchableOpacity onPress={onNavigateBack} style={styles.closeButton}>
-                  <Image source={CLOSE_ICON} style={styles.closeIcon} />
+                                    <Image source={CLOSE_ICON} style={styles.closeIcon} />         
+                       {' '}
                 </TouchableOpacity>
+                             {' '}
               </View>
+                         {' '}
             </View>
-            <View style={{ flex: 1 }} pointerEvents="none" />
+                        <View style={{ flex: 1 }} pointerEvents="none" />           {' '}
             <View style={styles.footer}>
+                           {' '}
               <View style={styles.actionsContainer}>
+                               {' '}
                 <TouchableOpacity
                   onPress={onNavigateToAttraction}
                   style={[
@@ -433,24 +473,33 @@ const StoryPage = React.memo(
                     (isAttractionDisabled || isBlocked) && styles.disabledActionButton,
                   ]}
                   disabled={isAttractionDisabled || isBlocked}>
-                  <Image source={ATTRACTION_ICON} style={styles.actionIcon} />
-                  <Text style={styles.actionButtonText}>Attraction</Text>
+                                    <Image source={ATTRACTION_ICON} style={styles.actionIcon} />   
+                                <Text style={styles.actionButtonText}>Attraction</Text>             
+                   {' '}
                 </TouchableOpacity>
+                               {' '}
                 {isBlocked ? (
                   <TouchableOpacity onPress={onUnblockUser} style={styles.actionButton}>
-                    <Image source={UNBLOCK_ICON} style={styles.actionIcon} />
-                    <Text style={styles.actionButtonText}>Unblock</Text>
+                                        <Image source={UNBLOCK_ICON} style={styles.actionIcon} />   
+                                    <Text style={styles.actionButtonText}>Unblock</Text>           
+                         {' '}
                   </TouchableOpacity>
                 ) : (
                   <TouchableOpacity onPress={onBlockUser} style={styles.actionButton}>
-                    <Image source={BLOCK_ICON} style={styles.actionIcon} />
-                    <Text style={styles.actionButtonText}>Block</Text>
+                                        <Image source={BLOCK_ICON} style={styles.actionIcon} />     
+                                  <Text style={styles.actionButtonText}>Block</Text>               
+                     {' '}
                   </TouchableOpacity>
                 )}
+                             {' '}
               </View>
+                         {' '}
             </View>
+                     {' '}
           </SafeAreaView>
+                 {' '}
         </View>
+             {' '}
       </GestureDetector>
     );
   }
@@ -600,7 +649,7 @@ export default function StoriesScreen() {
       fetchUrlForStory(currentIndex);
       if (currentIndex + 1 < stories.length) fetchUrlForStory(currentIndex + 1);
     }
-  }, [currentIndex, stories]); // Removed playableUrls from dependency array to avoid re-triggering
+  }, [currentIndex, stories]);
 
   const pauseAllVideos = useCallback(async () => {
     await Promise.all(Object.values(videoRefs.current).map((v) => v?.pauseAsync().catch(() => {})));
@@ -738,7 +787,7 @@ export default function StoriesScreen() {
       currentVideoProgress.value = 0;
       flatListRef.current?.scrollToIndex({ index, animated: true });
     },
-    [stories, currentIndex] // Removed currentVideoProgress from deps
+    [stories, currentIndex]
   );
 
   const onViewableItemsChanged = useRef(({ viewableItems }: any) => {
@@ -749,7 +798,6 @@ export default function StoriesScreen() {
         if (oldStoryId && videoRefs.current[oldStoryId]) {
           videoRefs.current[oldStoryId]?.stopAsync().catch(() => {});
         }
-        // This state update is handled by the effect below to avoid race conditions
         runOnJS(setCurrentIndex)(newVisibleIndex);
         currentVideoProgress.value = 0;
       }
@@ -787,14 +835,9 @@ export default function StoriesScreen() {
           videoRef={(ref) => (videoRefs.current[storyId] = ref)}
           onPlaybackStatusUpdate={(status: AVPlaybackStatus) => {
             if (index !== currentIndex || !status.isLoaded || item.isBlocked) return;
-
-            // ✅ OPTIMIZATION: State update `setVideoLoadStates` yahan se hata diya gaya hai.
-            // Yeh ab sirf onReadyForDisplay mein call hoga. Isse bewajah ke re-renders kam honge.
-
             if (status.durationMillis) {
               currentVideoProgress.value = status.positionMillis / status.durationMillis;
             }
-
             if (status.didJustFinish && !status.isLooping) {
               const nextIndex = index + 1;
               if (nextIndex < stories.length) {
@@ -827,7 +870,7 @@ export default function StoriesScreen() {
     },
     [
       currentIndex,
-      stories.length, // Only depend on length, not the whole array
+      stories.length,
       playableUrls,
       videoLoadStates,
       goToStory,
@@ -843,33 +886,37 @@ export default function StoriesScreen() {
   if (loading && stories.length === 0) {
     return (
       <SafeAreaView style={[styles.container, styles.centered]}>
-        <ActivityIndicator size="large" color={colors.White || '#FFF'} />
+                <ActivityIndicator size="large" color={colors.White || '#FFF'} />     {' '}
       </SafeAreaView>
     );
   }
   if (error && stories.length === 0) {
     return (
       <SafeAreaView style={[styles.container, styles.centered]}>
-        <Text style={[styles.messageText, styles.errorTextMsgScreen]}>{error}</Text>
+                <Text style={[styles.messageText, styles.errorTextMsgScreen]}>{error}</Text>       {' '}
         <TouchableOpacity onPress={navigateBack} style={styles.messageButton}>
-          <Text style={styles.messageButtonText}>Go Back</Text>
+                    <Text style={styles.messageButtonText}>Go Back</Text>       {' '}
         </TouchableOpacity>
+             {' '}
       </SafeAreaView>
     );
   }
   if (!loading && stories.length === 0) {
     return (
       <SafeAreaView style={[styles.container, styles.centered]}>
-        <Text style={styles.messageText}>No nearby stories found for this date.</Text>
+                <Text style={styles.messageText}>No nearby stories found for this date.</Text>     
+         {' '}
         <TouchableOpacity onPress={navigateBack} style={styles.messageButton}>
-          <Text style={styles.messageButtonText}>Go Back</Text>
+                    <Text style={styles.messageButtonText}>Go Back</Text>       {' '}
         </TouchableOpacity>
+             {' '}
       </SafeAreaView>
     );
   }
 
   return (
     <View style={styles.container}>
+           {' '}
       <FlatList
         ref={flatListRef}
         data={stories}
@@ -882,7 +929,7 @@ export default function StoriesScreen() {
         viewabilityConfig={{ viewAreaCoveragePercentThreshold: 50 }}
         initialNumToRender={1}
         maxToRenderPerBatch={1}
-        windowSize={3} // 1 visible, 1 next, 1 previous. Memory aur performance ka accha balance.
+        windowSize={3}
         getItemLayout={(_data, index) => ({
           length: SCREEN_WIDTH,
           offset: SCREEN_WIDTH * index,
@@ -891,9 +938,9 @@ export default function StoriesScreen() {
         onScrollBeginDrag={() => (isSwiping.current = true)}
         onMomentumScrollEnd={() => (isSwiping.current = false)}
         bounces={false}
-        // ✅ OPTIMIZATION: Yeh prop memory usage kam karne mein madad karta hai, khaas kar Android par.
         removeClippedSubviews={true}
       />
+           {' '}
       <BottomSheetModal
         ref={bottomSheetModalRef}
         index={0}
@@ -902,7 +949,9 @@ export default function StoriesScreen() {
         backdropComponent={renderBackdrop}
         backgroundStyle={styles.bottomSheetBackground}
         handleIndicatorStyle={styles.bottomSheetHandle}>
+               {' '}
         <BottomSheetView style={styles.bottomSheetContentContainer}>
+                   {' '}
           {selectedUserIdForModal && (
             <UserProfileCard
               userId={selectedUserIdForModal}
@@ -910,8 +959,11 @@ export default function StoriesScreen() {
               authContextLoadingFromProp={authContextLoading}
             />
           )}
+                 {' '}
         </BottomSheetView>
+             {' '}
       </BottomSheetModal>
+           {' '}
       <BubblePopup
         visible={popupState.visible}
         type={popupState.type}
@@ -920,6 +972,7 @@ export default function StoriesScreen() {
         buttonText="OK"
         onClose={() => setPopupState((prev) => ({ ...prev, visible: false }))}
       />
+         {' '}
     </View>
   );
 }

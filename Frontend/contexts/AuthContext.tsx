@@ -38,7 +38,7 @@ const apiAudience = 'https://api.daytz.app/v1';
 
 const getApiBaseUrl = (): string => {
   // Using production URL from Railway.app
-  const envApiUrl = 'http://192.168.1.9:3000/api';
+  const envApiUrl = 'https://backend-production-7442.up.railway.app/api';
   if (envApiUrl) return envApiUrl;
   // Fallback for local development (not typically used with production backend)
   if (Platform.OS === 'android') return 'http://10.0.2.2:3000/api';
