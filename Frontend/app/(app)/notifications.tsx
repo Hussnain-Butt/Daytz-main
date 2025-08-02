@@ -1,5 +1,5 @@
-// File: app/(app)/notifications.tsx
 // ✅ COMPLETE AND FINAL UPDATED CODE
+// File: app/(app)/notifications.tsx
 
 import React, { useState, useEffect, useCallback } from 'react';
 import {
@@ -138,22 +138,13 @@ export default function NotificationsScreen() {
 
     switch (item.type) {
       case 'ATTRACTION_PROPOSAL':
-        if (item.related_entity_id && item.proposing_user_id) {
-          // ✅ FIX: Explicitly convert parameters to string.
-          router.push({
-            pathname: '/(app)/stories',
-            params: {
-              date: String(item.related_entity_id),
-              initialUserId: String(item.proposing_user_id),
-            },
-          });
-        }
+        // ✅ UPDATED: Redirect to the main calendar page
+        router.push('/(app)/calender');
         break;
 
       case 'MATCH_PROPOSAL':
         if (item.related_entity_id && item.proposing_user_id) {
-          // ✅ FIX: Explicitly convert parameters to string to prevent type errors.
-          // This ensures the receiving screen gets the expected data type.
+          // Explicitly convert parameters to string to prevent type errors.
           router.push({
             pathname: '/(app)/propose-date',
             params: {
@@ -170,7 +161,7 @@ export default function NotificationsScreen() {
       case 'DATE_RESCHEDULED':
       case 'DATE_CANCELLED':
         if (item.related_entity_id) {
-          // ✅ FIX: Also ensure this is a string for consistency and safety.
+          // Ensure this is a string for consistency and safety.
           router.push(`/(app)/dates/${String(item.related_entity_id)}`);
         }
         break;

@@ -17,12 +17,13 @@ import {
   KeyboardAvoidingView,
   Modal,
   FlatList,
-  TouchableWithoutFeedback, // Import TouchableWithoutFeedback
+  TouchableWithoutFeedback,
 } from 'react-native';
 import { Text, Avatar } from 'react-native-paper';
 import { format, parseISO, isValid } from 'date-fns';
 import DateTimePickerModal from 'react-native-modal-datetime-picker';
 import { useRouter, useLocalSearchParams } from 'expo-router';
+// FIX: Corrected import path for AuthContext
 import { useAuth } from '../../contexts/AuthContext';
 import {
   createDate,
@@ -66,24 +67,18 @@ const BubblePopup = ({ visible, type, title, message, buttonText, onClose }) => 
   const buttonTextStyle = isSuccess ? styles.successButtonText : styles.errorButtonText;
   return (
     <Modal transparent visible={visible} animationType="fade" onRequestClose={onClose}>
-           {' '}
       <View style={styles.overlay}>
-               {' '}
         <View style={styles.popupContainer}>
-                    <Image source={imageSource} style={styles.popupImage} />         {' '}
+          <Image source={imageSource} style={styles.popupImage} />
           <View style={styles.bubble}>
-                        <Text style={styles.popupTitle}>{title}</Text>           {' '}
-            <Text style={styles.popupMessage}>{message}</Text>           {' '}
+            <Text style={styles.popupTitle}>{title}</Text>
+            <Text style={styles.popupMessage}>{message}</Text>
             <TouchableOpacity style={[styles.popupButton, buttonStyle]} onPress={onClose}>
-                            <Text style={buttonTextStyle}>{buttonText}</Text>           {' '}
+              <Text style={buttonTextStyle}>{buttonText}</Text>
             </TouchableOpacity>
-                     {' '}
           </View>
-                 {' '}
         </View>
-             {' '}
       </View>
-         {' '}
     </Modal>
   );
 };
@@ -113,7 +108,7 @@ const ProposeDateScreen = () => {
     title: '',
     message: '',
     onCloseCallback: undefined as (() => void) | undefined,
-  }); // New state for Google Places Autocomplete
+  });
 
   const [predictions, setPredictions] = useState<any[]>([]);
   const [showPredictions, setShowPredictions] = useState(false);
@@ -281,9 +276,8 @@ const ProposeDateScreen = () => {
     if (existingDate && existingDate.status !== 'cancelled' && existingDate.status !== 'declined') {
       return (
         <View style={styles.infoBox}>
-                    <Text style={styles.infoBoxText}>Date Already Active</Text>         {' '}
-          <Text style={styles.infoBoxSubText}>A proposal for this day already exists.</Text>     
-           {' '}
+          <Text style={styles.infoBoxText}>Date Already Active</Text>
+          <Text style={styles.infoBoxSubText}>A proposal for this day already exists.</Text>
         </View>
       );
     }
@@ -292,13 +286,11 @@ const ProposeDateScreen = () => {
         style={[styles.submitButton, (isSubmitting || !myAttraction) && styles.disabledButton]}
         onPress={handleProposeDate}
         disabled={isSubmitting || !myAttraction}>
-               {' '}
         {isSubmitting ? (
           <ActivityIndicator color={screenColors.buttonText} />
         ) : (
           <Text style={styles.submitButtonText}>Submit Proposal</Text>
         )}
-             {' '}
       </TouchableOpacity>
     );
   };
@@ -313,70 +305,55 @@ const ProposeDateScreen = () => {
   if (isLoading) {
     return (
       <SafeAreaView style={[styles.container, styles.centered]}>
-                <ActivityIndicator size="large" color={screenColors.textPrimary} />     {' '}
+        <ActivityIndicator size="large" color={screenColors.textPrimary} />
       </SafeAreaView>
     );
   }
   if (error) {
     return (
       <SafeAreaView style={[styles.container, styles.centered]}>
-                <Text style={styles.errorText}>{error}</Text>       {' '}
+        <Text style={styles.errorText}>{error}</Text>
         <TouchableOpacity onPress={() => router.back()} style={styles.backButtonError}>
-                    <Text style={styles.backButtonText}>Go Back</Text>       {' '}
+          <Text style={styles.backButtonText}>Go Back</Text>
         </TouchableOpacity>
-             {' '}
       </SafeAreaView>
     );
   }
 
   return (
     <SafeAreaView style={styles.container}>
-           {' '}
       <KeyboardAvoidingView
         behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
         style={{ flex: 1 }}>
-               {' '}
         <ScrollView
           contentContainerStyle={styles.scrollContentContainer}
           keyboardShouldPersistTaps="handled"
           showsVerticalScrollIndicator={false}
           pointerEvents={showPredictions ? 'none' : 'auto'}>
-                   {' '}
           <View style={styles.innerContainer}>
-                       {' '}
             <View style={styles.headerContainer}>
-                           {' '}
               <TouchableOpacity onPress={() => router.back()} style={styles.backButton}>
-                                <Image source={BACK_ARROW_ICON} style={styles.backIcon} />         
-                   {' '}
+                <Image source={BACK_ARROW_ICON} style={styles.backIcon} />
               </TouchableOpacity>
-                            <Image source={BRAND_LOGO} style={styles.headerLogo} />
-                            <View style={{ width: 40 }} />           {' '}
+              <Image source={BRAND_LOGO} style={styles.headerLogo} />
+              <View style={{ width: 40 }} />
             </View>
-                       {' '}
             <View style={styles.mainContent}>
-                           {' '}
               <View style={styles.userInfoContainer}>
-                               {' '}
                 {targetUser?.profilePictureUrl ? (
                   <Avatar.Image size={64} source={{ uri: targetUser.profilePictureUrl }} />
                 ) : (
                   <Avatar.Icon size={64} icon="account" style={styles.avatarPlaceholder} />
                 )}
-                               {' '}
-                <Text style={styles.userName}>{targetUser?.firstName || 'User'}</Text>           
-                 {' '}
+                <Text style={styles.userName}>{targetUser?.firstName || 'User'}</Text>
               </View>
-                           {' '}
               {selectedEventDate && (
                 <Text style={styles.dateDisplay}>
-                                    Date: {format(selectedEventDate, 'MMM dd, yyyy')}             
-                   {' '}
+                  Date: {format(selectedEventDate, 'MMM dd, yyyy')}
                 </Text>
               )}
-                           {' '}
               <View style={styles.inputContainer}>
-                                <Text style={styles.inputLabel}>Venue</Text>               {' '}
+                <Text style={styles.inputLabel}>Venue</Text>
                 <TextInput
                   ref={venueInputRef}
                   style={styles.textInput}
@@ -395,47 +372,34 @@ const ProposeDateScreen = () => {
                     });
                   }}
                 />
-                             {' '}
               </View>
-                           {' '}
               <View style={styles.inputContainer}>
-                                <Text style={styles.inputLabel}>Time</Text>               {' '}
+                <Text style={styles.inputLabel}>Time</Text>
                 <TouchableOpacity onPress={() => setShowTimePicker(true)} style={styles.textInput}>
-                                   {' '}
                   <Text
                     style={[
                       styles.inputText,
                       !selectedTime && { color: screenColors.inputPlaceholder },
                     ]}>
-                                        {selectedTime ? format(selectedTime, 'p') : 'Select a time'}
-                                     {' '}
+                    {selectedTime ? format(selectedTime, 'p') : 'Select a time'}
                   </Text>
-                                 {' '}
                 </TouchableOpacity>
-                             {' '}
               </View>
-                         {' '}
             </View>
-                     {' '}
           </View>
-                 {' '}
         </ScrollView>
-                <View style={styles.footer}>{renderFooter()}</View>     {' '}
+        <View style={styles.footer}>{renderFooter()}</View>
       </KeyboardAvoidingView>
-           {' '}
       <Modal
         transparent
         visible={showPredictions && predictions.length > 0}
         onRequestClose={() => setShowPredictions(false)}
         animationType="fade">
-               {' '}
         <TouchableOpacity
           style={styles.modalOverlay}
           activeOpacity={1}
           onPress={() => setShowPredictions(false)}>
-                   {' '}
           <TouchableWithoutFeedback onPress={() => {}}>
-                       {' '}
             <View
               style={[
                 styles.predictionsModalContainer,
@@ -445,7 +409,6 @@ const ProposeDateScreen = () => {
                   width: venueInputLayout.width,
                 },
               ]}>
-                           {' '}
               <FlatList
                 data={predictions}
                 keyExtractor={(item) => item.place_id}
@@ -453,30 +416,22 @@ const ProposeDateScreen = () => {
                   <TouchableOpacity
                     style={styles.predictionItem}
                     onPress={() => handlePredictionPress(item)}>
-                                       {' '}
-                    <Text style={styles.predictionText}>{item.description}</Text>               
-                     {' '}
+                    <Text style={styles.predictionText}>{item.description}</Text>
                   </TouchableOpacity>
                 )}
                 style={styles.predictionsListModal}
                 keyboardShouldPersistTaps="always"
               />
-                         {' '}
             </View>
-                     {' '}
           </TouchableWithoutFeedback>
-                 {' '}
         </TouchableOpacity>
-             {' '}
       </Modal>
-           {' '}
       <DateTimePickerModal
         isVisible={showTimePicker}
         mode="time"
         onConfirm={handleTimeConfirm}
         onCancel={() => setShowTimePicker(false)}
       />
-           {' '}
       <BubblePopup
         visible={popupState.visible}
         type={popupState.type}
@@ -489,7 +444,6 @@ const ProposeDateScreen = () => {
           if (callback) callback();
         }}
       />
-         {' '}
     </SafeAreaView>
   );
 };
@@ -662,5 +616,4 @@ const styles = StyleSheet.create({
     fontSize: 16,
   },
 });
-
 export default ProposeDateScreen;
