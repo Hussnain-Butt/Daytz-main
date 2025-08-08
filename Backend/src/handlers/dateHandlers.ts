@@ -19,10 +19,12 @@ export const createDateHandler = asyncHandler(
   async (req: CustomRequest, res: Response, next: NextFunction) => {
     const proposerUserId = req.userId
     const payload: CreateDatePayload = req.body
-    const { date, userTo, romanticRating, sexualRating, friendshipRating } = payload
+    const { date, time, userTo, romanticRating, sexualRating, friendshipRating } = payload
 
     if (!proposerUserId) return res.status(401).json({ message: 'Unauthorized.' })
-    if (!date || !userTo) return res.status(400).json({ message: 'Date and userTo are required.' })
+    if (!date || !userTo || !time) {
+      return res.status(400).json({ message: 'Date, time, and userTo are required.' })
+    }
 
     if (
       typeof romanticRating !== 'number' ||
@@ -53,6 +55,15 @@ export const createDateHandler = asyncHandler(
       return res.status(201).json(createdDate)
     } catch (error: any) {
       console.error('[CreateDateHandler] Error during full proposal creation:', error.message)
+      // ✅✅✅ NAYA FEATURE: CONFLICT ERROR HANDLING ✅✅✅
+      if (error.code === 'SCHEDULING_CONFLICT') {
+        return res.status(409).json({
+          code: error.code,
+          message:
+            'This time is unavailable due to a scheduling conflict. Please choose a time at least 30 minutes before or after another scheduled date for either person.',
+        })
+      }
+      // ✅✅✅ END OF NAYA FEATURE ✅✅✅
       if (error.code === 'NOT_A_MATCH') {
         return res.status(409).json({ code: error.code, message: error.message })
       }
@@ -66,6 +77,8 @@ export const createDateHandler = asyncHandler(
 )
 
 // --- updateDateHandler ---
+// NOTE: For simplicity, buffer check is not added to update. If required, a similar logic
+// can be added here when a date's time is being changed.
 export const updateDateHandler = asyncHandler(
   async (req: CustomRequest, res: Response, next: NextFunction) => {
     const updaterUserId = req.userId

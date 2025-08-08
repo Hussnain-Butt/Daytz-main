@@ -26,6 +26,36 @@ const mapRowToDate = (row: any): DateType | null => {
 }
 
 class DatesRepository {
+  // ✅✅✅ NAYA FEATURE: SCHEDULE CONFLICT CHECKER ✅✅✅
+  /**
+   * Finds any dates for the given users on a specific day that conflict with the proposed time.
+   * A conflict occurs if the new time is within a 30-minute buffer of an existing date.
+   * @param userIds - Array containing the two user IDs.
+   * @param date - The date of the proposed meeting (YYYY-MM-DD).
+   * @param time - The time of the proposed meeting (HH:MM:SS).
+   * @param client - Optional PG client for transactions.
+   * @returns An array of conflicting DateType objects. An empty array means no conflict.
+   */
+  async findConflictingDatesForUsers(
+    userIds: string[],
+    date: string,
+    time: string,
+    client: PoolClient | null = null,
+  ): Promise<DateType[]> {
+    const db = client || pool
+    const query = `
+      SELECT * FROM dates
+      WHERE 
+        date::date = $1::date
+        AND (user_from = ANY($2::text[]) OR user_to = ANY($2::text[]))
+        AND status IN ('pending', 'approved')
+        AND ($3::time) BETWEEN (time - INTERVAL '30 minutes') AND (time + INTERVAL '30 minutes');
+    `
+    const { rows } = await db.query(query, [date, userIds, time])
+    return rows.map(mapRowToDate).filter((d): d is DateType => d !== null)
+  }
+  // ✅✅✅ END OF NAYA FEATURE ✅✅✅
+
   async createDateEntry(
     dateEntry: CreateDateInternal,
     client: PoolClient | null = null,
@@ -50,7 +80,6 @@ class DatesRepository {
     return newDate
   }
 
-  // ✅ BADLAV YAHAN HAI: `SELECT` ke baad wale invisible character ko remove kar diya gaya hai.
   async getDateEntryByIdWithUserDetails(dateId: number): Promise<any | null> {
     const query = `
       SELECT 

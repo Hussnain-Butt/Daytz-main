@@ -30,12 +30,13 @@ class DatesService {
     proposerUserId: string,
     payload: CreateDatePayload,
   ): Promise<DateType> {
-    const { userTo, date } = payload
+    const { userTo, date, time } = payload
     const client = await pool.connect()
 
     try {
-      await client.query('BEGIN') // Step 1: Verify karein ki in dono users ke beech is date ke liye ek successful match hai.
+      await client.query('BEGIN')
 
+      // Step 1: Verify mutual match
       const [proposerAttraction, proposeeAttraction] = await Promise.all([
         this.attractionRepository.getAttraction(proposerUserId, userTo, date, client),
         this.attractionRepository.getAttraction(userTo, proposerUserId, date, client),
@@ -50,8 +51,32 @@ class DatesService {
         const error = new Error('A mutual match is required before a date can be proposed.')
         ;(error as any).code = 'NOT_A_MATCH'
         throw error
-      } // Step 2: Check karein ki is din ke liye pehle se koi active date to nahi hai.
+      }
 
+      // ✅✅✅ NAYA FEATURE: BUFFER CONFLICT CHECK ✅✅✅
+      // Step 2: Check for scheduling conflicts with a 30-minute buffer
+      if (time) {
+        const conflictingDates = await this.datesRepository.findConflictingDatesForUsers(
+          [proposerUserId, userTo],
+          date,
+          time,
+          client,
+        )
+
+        if (conflictingDates.length > 0) {
+          console.log(
+            `[DatesService] Scheduling conflict found for users ${proposerUserId}, ${userTo} at ${date} ${time}.`,
+          )
+          const error = new Error(
+            'Scheduling conflict. The proposed time is too close to another date.',
+          )
+          ;(error as any).code = 'SCHEDULING_CONFLICT'
+          throw error
+        }
+      }
+      // ✅✅✅ END OF NAYA FEATURE ✅✅✅
+
+      // Step 3: Check for pre-existing active dates on the same day
       const existingDate = await this.datesRepository.getDateEntryByUsersAndDate(
         proposerUserId,
         userTo,
@@ -65,8 +90,9 @@ class DatesService {
         existingDate.status !== 'completed'
       ) {
         throw new Error('An active date proposal already exists for this day.')
-      } // Step 3: Nayi date entry create karein.
+      }
 
+      // Step 4: Create new date entry
       const dateEntry = await this.datesRepository.createDateEntry(
         {
           ...payload,
@@ -76,8 +102,9 @@ class DatesService {
           userToApproved: false,
         },
         client,
-      ) // Step 4: Doosre user ko date proposal ki notification bhejein.
+      )
 
+      // Step 5: Send notification
       await this.notificationService.sendDateProposalNotification(
         proposerUserId,
         userTo,
@@ -102,8 +129,9 @@ class DatesService {
     } finally {
       client.release()
     }
-  } // --- Baaki ke functions mein koi badlav nahi ---
+  }
 
+  // --- Baaki ke functions mein koi badlav nahi ---
   async getDateEntryById(dateId: number, client?: PoolClient): Promise<DateType | null> {
     return this.datesRepository.getDateEntryById(dateId, client)
   }
