@@ -1,0 +1,95 @@
+{
+  "expo": {
+    "name": "daytz",
+    "slug": "daytz",
+    "version": "1.0.0",
+    "orientation": "portrait",
+    "icon": "./assets/icon.png",
+    "userInterfaceStyle": "dark",
+    "scheme": "com.daytz.app",
+    "splash": {
+      "image": "./assets/splash.png",
+      "resizeMode": "contain",
+      "backgroundColor": "#121212"
+    },
+    "assetBundlePatterns": [
+      "**/*"
+    ],
+    "owner": "anchorweb",
+    "web": {
+      "bundler": "metro"
+    },
+    "plugins": [
+      "expo-router",
+      [
+        "expo-image-picker",
+        {
+          "photosPermission": "Allow Daytz to access your photos to let you upload profile pictures.",
+          "microphonePermission": "Allow Daytz to access your microphone.",
+          "cameraPermission": "Allow Daytz to access your camera to record profile videos."
+        }
+      ],
+      [
+        "expo-build-properties",
+        {
+          "android": {
+            "useLegacyPackaging": true,
+            "androidGradlePluginVersion": "8.2.1"
+          }
+        }
+      ],
+      "expo-font",
+      "expo-secure-store",
+      "expo-notifications",
+      "expo-web-browser",
+      "@react-native-firebase/app",
+      "@react-native-firebase/messaging"
+    ],
+    "ios": {
+      "supportsTablet": true,
+      "bundleIdentifier": "com.daytz.app",
+      "googleServicesFile": "./GoogleService-Info.plist",
+      "infoPlist": {
+        "NSPhotoLibraryUsageDescription": "Allow Daytz to access your photos to let you upload profile pictures.",
+        "NSMicrophoneUsageDescription": "Allow Daytz to access your microphone.",
+        "CFBundleURLTypes": [
+          {
+            "CFBundleURLSchemes": [
+              "com.daytz.app",
+              "dev-il3jgemg2szpurs5.us.auth0.com"
+            ]
+          },
+          {
+            "CFBundleURLSchemes": [
+              "com.daytz.app",
+              "dev-il3jgemg2szpurs5.us.auth0.com"
+            ]
+          }
+        ],
+        "ITSAppUsesNonExemptEncryption": false
+      }
+    },
+    "android": {
+      "adaptiveIcon": {
+        "foregroundImage": "./assets/adaptive-icon.png",
+        "backgroundColor": "#121212"
+      },
+      "package": "com.daytz.app",
+      "googleServicesFile": "./google-services.json",
+      "permissions": [
+        "android.permission.READ_EXTERNAL_STORAGE",
+        "android.permission.RECORD_AUDIO",
+        "android.permission.POST_NOTIFICATIONS"
+      ],
+      "versionCode": 30
+    },
+    "extra": {
+      "router": {
+        "origin": false
+      },
+      "eas": {
+        "projectId": "8edc2a4f-399b-499e-b0f6-2c9d3443e7b0"
+      }
+    }
+  }
+}
