@@ -1,3 +1,4 @@
+// File: app/(app)/calendar.tsx
 // ✅ COMPLETE AND FINAL UPDATED FILE
 
 import React, { useState, useCallback, useEffect } from 'react';
@@ -189,13 +190,16 @@ const getTypeOfAttraction = (r: number, s: number, f: number) => {
   return 'My Person!';
 };
 
-// --- ✅✅✅ UpcomingDateItem component (YAHAN BADLAV KIYA GAYA HAI) ✅✅✅ ---
+// ✅✅✅ UpcomingDateItem component (YAHAN BADLAV KIYA GAYA HAI) ✅✅✅ ---
+// We add `hasConflict` to the item type and props
+type UpcomingDateWithConflict = UpcomingDate & { hasConflict?: boolean };
+
 const UpcomingDateItem = ({
   item,
   onPress,
   onRatePress,
 }: {
-  item: UpcomingDate;
+  item: UpcomingDateWithConflict;
   onPress: (item: UpcomingDate) => void;
   onRatePress: (item: UpcomingDate) => void;
 }) => {
@@ -211,10 +215,12 @@ const UpcomingDateItem = ({
 
   const parsedDate = parseISO(item.date);
   const isValidDate = isValid(parsedDate);
-
-  // ✅ YEH LOGIC AAPKI REQUIREMENT POORI KAREGA
-  const isDateInPast = isValidDate && isPast(parsedDate); // Check if the date has passed
-  const hasGivenFeedback = !!item.myOutcome; // Check if feedback is already submitted
+  const isDateInPast = isValidDate && isPast(parsedDate);
+  const hasGivenFeedback = !!item.myOutcome;
+  const isPendingMyResponse =
+    item.status === 'pending' &&
+    ((item.userFrom === useUserStore.getState().userProfile?.userId && !item.userFromApproved) ||
+      (item.userTo === useUserStore.getState().userProfile?.userId && !item.userToApproved));
 
   return (
     <TouchableOpacity style={styles.upcomingItem} onPress={() => onPress(item)}>
@@ -238,22 +244,35 @@ const UpcomingDateItem = ({
         )}
       </View>
       <View style={styles.statusSection}>
-        <View style={styles.statusContainer}>
-          <Ionicons name="checkmark-circle" size={20} color={colors.Success} />
-          <Text style={styles.statusText}>Confirmed</Text>
-        </View>
+        {item.status === 'approved' && (
+          <View style={styles.statusContainer}>
+            <Ionicons name="checkmark-circle" size={20} color={colors.Success} />
+            <Text style={styles.statusText}>Confirmed</Text>
+          </View>
+        )}
+        {isPendingMyResponse && (
+          <View style={styles.pendingStatusContainer}>
+            <Ionicons name="hourglass-outline" size={18} color={colors.GoldPrimary} />
+            <Text style={styles.pendingStatusText}>Response needed</Text>
+          </View>
+        )}
 
-        {/* ✅ YAHAN CONDITIONAL RENDERING KA NAYA LOGIC HAI */}
+        {/* ✅ NAYA FEATURE: CONFLICT UI */}
+        {item.hasConflict && !isDateInPast && (
+          <View style={styles.conflictContainer}>
+            <Ionicons name="alert-circle" size={16} style={styles.conflictIcon} />
+            <Text style={styles.conflictText}>Scheduling Conflict</Text>
+          </View>
+        )}
+
+        {/* Rate Date Logic */}
         {hasGivenFeedback ? (
-          // 1. Agar feedback de diya hai, to yeh dikhao
           <Text style={styles.feedbackSentText}>Feedback Sent</Text>
         ) : isDateInPast ? (
-          // 2. Agar date guzar gayi hai aur feedback nahi diya, to active button dikhao
           <TouchableOpacity style={styles.rateButton} onPress={() => onRatePress(item)}>
             <Text style={styles.rateButtonText}>Rate Date</Text>
           </TouchableOpacity>
         ) : (
-          // 3. Agar date aane wali hai, to disabled button dikhao
           <View style={[styles.rateButton, styles.disabledRateButton]}>
             <Text style={styles.disabledRateButtonText}>Rate Date</Text>
           </View>
@@ -272,7 +291,7 @@ const CalendarHomeScreen = () => {
   const [isCalendarLoading, setIsCalendarLoading] = useState(true);
   const [calendarData, setCalendarData] = useState<CalendarDay[]>([]);
   const [unreadCount, setUnreadCount] = useState(0);
-  const [upcomingDates, setUpcomingDates] = useState<UpcomingDate[]>([]);
+  const [upcomingDates, setUpcomingDates] = useState<UpcomingDateWithConflict[]>([]); // ✅ Use new type
   const [isUpcomingLoading, setIsUpcomingLoading] = useState(true);
   const [isRefreshing, setIsRefreshing] = useState(false);
   const [isFeedbackModalVisible, setFeedbackModalVisible] = useState(false);
@@ -287,6 +306,42 @@ const CalendarHomeScreen = () => {
   const showPopup = (title: string, message: string, type: 'success' | 'error' = 'error') =>
     setPopupState({ visible: true, type, title, message });
 
+  // ✅✅✅ NAYA FEATURE: CONFLICT CHECKING LOGIC ✅✅✅
+  const checkForConflicts = (dates: UpcomingDate[]): UpcomingDateWithConflict[] => {
+    // Helper to convert "HH:mm:ss" to total minutes from midnight
+    const timeToMinutes = (timeStr: string | null | undefined): number | null => {
+      if (!timeStr) return null;
+      const parts = timeStr.split(':');
+      if (parts.length < 2) return null;
+      const [hours, minutes] = parts.map(Number);
+      return hours * 60 + minutes;
+    };
+
+    // Return a new array with the `hasConflict` property added
+    return dates.map((date1) => {
+      const time1 = timeToMinutes(date1.time);
+      if (time1 === null) return { ...date1, hasConflict: false };
+
+      // Check if there is any *other* date in the list that conflicts
+      const hasConflict = dates.some((date2) => {
+        // Don't compare a date with itself
+        if (date1.dateId === date2.dateId) return false;
+
+        // Dates must be on the same day to conflict
+        if (date1.date !== date2.date) return false;
+
+        const time2 = timeToMinutes(date2.time);
+        if (time2 === null) return false;
+
+        // A conflict exists if the time difference is less than 60 minutes
+        // (30 mins buffer before + 30 mins buffer after = 60 mins total window)
+        return Math.abs(time1 - time2) < 60;
+      });
+
+      return { ...date1, hasConflict };
+    });
+  };
+
   const fetchAllScreenData = useCallback(async () => {
     if (!auth0User?.sub || !userProfile?.userId) {
       setIsCalendarLoading(false);
@@ -299,7 +354,6 @@ const CalendarHomeScreen = () => {
     }
 
     try {
-      // ✅ The app makes API calls here to fetch data.
       const [calRes, upRes, countRes] = await Promise.all([
         getCalendarDaysByUserId(),
         getUpcomingDates(),
@@ -313,7 +367,7 @@ const CalendarHomeScreen = () => {
 
       if (validDates.length > 0) {
         const attractionPromises = validDates
-          .filter((d) => d.status === 'approved')
+          .filter((d) => ['approved', 'pending'].includes(d.status))
           .map((d) => {
             const from =
               d.userFrom === userProfile.userId ? userProfile.userId : d.otherUser.userId;
@@ -334,15 +388,15 @@ const CalendarHomeScreen = () => {
           const parsedDate = parseISO(d.date);
           if (!isValid(parsedDate))
             return { ...d, romanticRating: 0, sexualRating: 0, friendshipRating: 0 };
-
           const attractionResult = attractionResults.find(
             (r) =>
               r &&
               r.data &&
               isValid(parseISO(r.data.date)) &&
-              format(parseISO(r.data.date), 'yyyy-MM-dd') === format(parsedDate, 'yyyy-MM-dd')
+              format(parseISO(r.data.date), 'yyyy-MM-dd') === format(parsedDate, 'yyyy-MM-dd') &&
+              ((r.data.userFrom === d.userFrom && r.data.userTo === d.userTo) ||
+                (r.data.userFrom === d.userTo && r.data.userTo === d.userFrom))
           );
-
           if (attractionResult?.data) {
             return {
               ...d,
@@ -354,12 +408,13 @@ const CalendarHomeScreen = () => {
           return { ...d, romanticRating: 0, sexualRating: 0, friendshipRating: 0 };
         });
 
-        setUpcomingDates(datesWithAttraction);
+        // ✅ Pass the dates through the conflict checker before setting state
+        const datesWithConflictInfo = checkForConflicts(datesWithAttraction);
+        setUpcomingDates(datesWithConflictInfo);
       } else {
         setUpcomingDates([]);
       }
     } catch (error) {
-      // ✅ This is where the server error is caught.
       console.error('Failed to fetch screen data:', error);
       showPopup('Load Failed', 'Could not load your calendar data. Please try again.', 'error');
     } finally {
@@ -405,13 +460,17 @@ const CalendarHomeScreen = () => {
       return showPopup('Error', 'Cannot verify date status. Please refresh.', 'error');
     try {
       const diff = new Date().getTime() - parseISO(item.updatedAt).getTime();
-      if (diff < 72 * 3600000) router.push(`/(app)/dates/${item.dateId}`);
-      else
+      const isPendingResponse = item.status === 'pending';
+      // Allow access if it's pending or was updated in the last 72 hours
+      if (isPendingResponse || diff < 72 * 3600000) {
+        router.push(`/(app)/dates/${item.dateId}`);
+      } else {
         showPopup(
           'Date Locked',
           'This date was approved more than 72 hours ago and can no longer be modified.',
           'error'
         );
+      }
     } catch {
       showPopup('Error', 'An unexpected error occurred while checking the date.', 'error');
     }
@@ -482,10 +541,10 @@ const CalendarHomeScreen = () => {
           <Text style={styles.upcomingTitle}>Upcoming & Past Plans</Text>
           {isUpcomingLoading && upcomingDates.length === 0 ? (
             <ActivityIndicator color={colors.White} style={{ marginTop: 20 }} />
-          ) : upcomingDates.some((d) => d.status === 'approved') ? (
+          ) : upcomingDates.some((d) => ['approved', 'pending'].includes(d.status)) ? (
             <View style={styles.listContainer}>
               {upcomingDates
-                .filter((item) => item.status === 'approved')
+                .filter((item) => ['approved', 'pending'].includes(item.status))
                 .map((item, idx) => (
                   <React.Fragment key={item.dateId}>
                     <UpcomingDateItem
@@ -493,9 +552,10 @@ const CalendarHomeScreen = () => {
                       onPress={handleDateItemPress}
                       onRatePress={handleRatePress}
                     />
-                    {idx < upcomingDates.filter((i) => i.status === 'approved').length - 1 && (
-                      <View style={styles.separator} />
-                    )}
+                    {idx <
+                      upcomingDates.filter((i) => ['approved', 'pending'].includes(i.status))
+                        .length -
+                        1 && <View style={styles.separator} />}
                   </React.Fragment>
                 ))}
             </View>
@@ -521,6 +581,7 @@ const CalendarHomeScreen = () => {
   );
 };
 
+// ✅ NAYE STYLES BHI ADD KIYE GAYE HAIN
 const styles = StyleSheet.create({
   safeArea: {
     flex: 1,
@@ -574,7 +635,7 @@ const styles = StyleSheet.create({
     fontSize: 16,
   },
   upcomingItem: { flexDirection: 'row', alignItems: 'center', paddingVertical: 12 },
-  upcomingItemDetails: { flex: 1, marginLeft: 12 },
+  upcomingItemDetails: { flex: 1, marginLeft: 12, marginRight: 8 },
   upcomingItemName: { fontSize: 16, fontWeight: '600', color: colors.White || '#FFFFFF' },
   upcomingItemInfo: { fontSize: 13, color: colors.Grey || '#9CA4A4' },
   upcomingItemTime: { fontSize: 13, color: colors.Grey || '#9CA4A4' },
@@ -585,7 +646,7 @@ const styles = StyleSheet.create({
     color: colors.PinkPrimary || '#ff149d',
     fontWeight: '600',
   },
-  statusSection: { alignItems: 'center', marginLeft: 10, width: 90 },
+  statusSection: { alignItems: 'center', marginLeft: 'auto', width: 100, gap: 4 },
   statusContainer: {
     flexDirection: 'row',
     alignItems: 'center',
@@ -600,8 +661,39 @@ const styles = StyleSheet.create({
     fontSize: 12,
     fontWeight: '600',
   },
+  pendingStatusContainer: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: 'rgba(255, 219, 92, 0.15)',
+    borderRadius: 12,
+    paddingVertical: 4,
+    paddingHorizontal: 8,
+  },
+  pendingStatusText: {
+    color: colors.GoldPrimary || '#FFDB5C',
+    marginLeft: 5,
+    fontSize: 12,
+    fontWeight: '600',
+  },
+  conflictContainer: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: 'rgba(255, 165, 0, 0.2)',
+    borderRadius: 12,
+    paddingVertical: 4,
+    paddingHorizontal: 8,
+  },
+  conflictIcon: {
+    color: '#FFA500', // Orange color for warning
+  },
+  conflictText: {
+    color: '#FFA500', // Orange color for warning
+    marginLeft: 5,
+    fontSize: 11,
+    fontWeight: 'bold',
+  },
   rateButton: {
-    marginTop: 8,
+    marginTop: 4,
     backgroundColor: colors.PinkPrimary || '#ff149d',
     borderRadius: 10,
     paddingVertical: 5,
@@ -610,11 +702,9 @@ const styles = StyleSheet.create({
     alignItems: 'center',
   },
   rateButtonText: { color: colors.White || '#FFFFFF', fontSize: 12, fontWeight: 'bold' },
-  // ✅ NAYA STYLE: Disabled button ke liye
   disabledRateButton: {
     backgroundColor: colors.DarkGrey || '#555555',
   },
-  // ✅ NAYA STYLE: Disabled button ke text ke liye
   disabledRateButtonText: {
     color: colors.Grey || '#9CA4A4',
     fontSize: 12,
@@ -627,6 +717,7 @@ const styles = StyleSheet.create({
     fontStyle: 'italic',
     textAlign: 'center',
   },
+  // Other styles (Popup, Modal, etc.) remain unchanged
   overlay: {
     flex: 1,
     backgroundColor: 'rgba(0, 0, 0, 0.7)',
